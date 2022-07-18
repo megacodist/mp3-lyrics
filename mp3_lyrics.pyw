@@ -2,7 +2,7 @@ from pathlib import Path
 
 from asyncio_thrd import AsyncioThrd
 from mp3_lyrics_win import Mp3LyricsWin
-from utils import ConfigureLogging, AppSettings, SetUnsupFile
+from app_utils import ConfigureLogging, AppSettings, SetUnsupFile
 
 
 # Definning global variables...
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     # running the application...
     mp3TagsWin = Mp3LyricsWin(
         res_dir=_MODULE_DIR / 'res',
-        asyncio_htd=asyncioThrd)
+        asyncio_thrd=asyncioThrd)
     mp3TagsWin.mainloop()
 
     # Finalizing...

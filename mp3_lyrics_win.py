@@ -1,8 +1,10 @@
+from asyncio import Future
+from enum import Enum, IntEnum
 import logging
 from pathlib import Path
 import re
 import tkinter as tk
-from tkinter import ttk
+from tkinter import PhotoImage, ttk
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import showerror
 
@@ -14,15 +16,25 @@ import pygame.event
 from pygame.mixer import music, quit
 from tksheet import Sheet
 
+from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
-from utils import AppSettings
+from lrc import Lrc
+from widgets import TreeviewMp3, WaitFrame
+from win_utils import AfterProcessInfo
+
+
+class AfterPlayed(IntEnum):
+    STOP_PLAYING = 0
+    REPEAT = 1
+    PLAY_FOLDER = 2
+    REPEAT_FOLDER = 3
 
 
 class Mp3LyricsWin(tk.Tk):
     def __init__(
             self,
             res_dir: str | Path,
-            asyncio_htd: AsyncioThrd,
+            asyncio_thrd: AsyncioThrd,
             screenName: str | None = None,
             baseName: str | None = None,
             className: str = 'Tk',
@@ -33,12 +45,12 @@ class Mp3LyricsWin(tk.Tk):
         super().__init__(screenName, baseName, className, useTk, sync, use)
         self.title('MP3 Lyrics')
 
-        # Reading & applying Lyrics Editor Window (LEW) settings...
+        # Reading & applying Lyrics Editor Window (MLW) settings...
         settings = self._ReadSettings()
         self.geometry(
-            f"{settings['LEW_WIDTH']}x{settings['LEW_HEIGHT']}"
-            + f"+{settings['LEW_X']}+{settings['LEW_Y']}")
-        self.state(settings['LEW_STATE'])
+            f"{settings['MLW_WIDTH']}x{settings['MLW_HEIGHT']}"
+            + f"+{settings['MLW_X']}+{settings['MLW_Y']}")
+        self.state(settings['MLW_STATE'])
 
         # Specifies whether the MP3 is playing or not
         self._isPlaying: bool = False
@@ -50,20 +62,32 @@ class Mp3LyricsWin(tk.Tk):
         self._MUSIC_END = USEREVENT + 1
 
         self._RES_DIR = res_dir
+        self._TIME_INTERVAL = 40
+        self._asyncThrd = asyncio_thrd
+        self._loadingFolder: AfterProcessInfo | None = None
+        self._loadingLrc: AfterProcessInfo | None = None
+
+        self._afterPlayed = tk.IntVar(
+            master=self,
+            value=int(AfterPlayed.STOP_PLAYING))
+        self._lrc: Lrc | None = None
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
         self._IMG_PAUSE: PIL.ImageTk.PhotoImage
         self._IMG_VOLUME: PIL.ImageTk.PhotoImage
+        self._IMG_MP3: PIL.ImageTk.PhotoImage
+        self._IMG_WAIT: list[PIL.ImageTk.PhotoImage]
 
         self._LoadRes()
         self._InitGui()
         self._InitPygame()
 
         # Applying the rest of settings...
-        self._slider_volume.set(settings['LEW_VOLUME'])
+        self._lastDir = settings['MLW_LAST_DIR']
+        self._slider_volume.set(settings['MLW_VOLUME'])
         self._sheet.set_column_widths([
-            settings['LEW_TS_COL_WIDTH'],
-            settings['LEW_LT_COL_WIDTH']])
+            settings['MLW_TS_COL_WIDTH'],
+            settings['MLW_LT_COL_WIDTH']])
         
         # Loading the lyrics for this MP3 if any...
         self._LoadLyrics()
@@ -101,6 +125,26 @@ class Mp3LyricsWin(tk.Tk):
         self._IMG_PAUSE = PIL.Image.open(self._IMG_PAUSE)
         self._IMG_PAUSE = self._IMG_PAUSE.resize(size=(24, 24,))
         self._IMG_PAUSE = PIL.ImageTk.PhotoImage(image=self._IMG_PAUSE)
+
+        # Loading 'mp3.png'...
+        self._IMG_MP3 = self._RES_DIR / 'mp3.png'
+        self._IMG_MP3 = PIL.Image.open(self._IMG_MP3)
+        self._IMG_MP3 = self._IMG_MP3.resize(size=(16, 16,))
+        self._IMG_MP3 = PIL.ImageTk.PhotoImage(image=self._IMG_MP3)
+
+        # Loading 'wait.gif...
+        gifFile = self._RES_DIR / 'wait.gif'
+        gifFile = PIL.Image.open(gifFile)
+        self._IMG_WAIT: list[PhotoImage] = []
+        idx = 0
+        while True:
+            try:
+                gifFile.seek(idx)
+                self._IMG_WAIT.append(
+                    PIL.ImageTk.PhotoImage(image=gifFile))
+                idx += 1
+            except EOFError :
+                break
     
     def _InitGui(self) -> None:
         # Creating menu bar...
@@ -119,28 +163,60 @@ class Mp3LyricsWin(tk.Tk):
             label='Open a file...',
             accelerator='Ctrl+O',
             command=self._OpenFile)
+        
+        # Ceating 'After played' submenu...
+        self._menu_afterPlayed = tk.Menu(
+            master=self._menubar,
+            tearoff=0)
+        self._menu_afterPlayed.add_radiobutton(
+            label='Stop playing',
+            value=int(AfterPlayed.STOP_PLAYING),
+            variable=self._afterPlayed)
+        self._menu_afterPlayed.add_radiobutton(
+            label='Repeat',
+            value=int(AfterPlayed.REPEAT),
+            variable=self._afterPlayed)
+        self._menu_afterPlayed.add_radiobutton(
+            label='Play folder',
+            value=int(AfterPlayed.PLAY_FOLDER),
+            variable=self._afterPlayed)
+        self._menu_afterPlayed.add_radiobutton(
+            label='Repeat folder',
+            value=int(AfterPlayed.REPEAT_FOLDER),
+            variable=self._afterPlayed)
+        
+        # Creating 'Player' menu...
+        self._menu_player = tk.Menu(
+            master=self._menubar,
+            tearoff=0)
+        self._menubar.add_cascade(
+            label='Player',
+            menu=self._menu_player)
+        self._menu_player.add_cascade(
+            label='After played',
+            menu=self._menu_afterPlayed)
 
-        #
+        # Ceating 'Insert a row' submenu...
         self._menu_insertRow = tk.Menu(
             master=self._menubar,
             tearoff=0)
         self._menu_insertRow.add_command(
             label='Above')
         self._menu_insertRow.add_command(
-            label='Bellow')
+            label='Below')
 
-        # Creating Sheet menu...
-        self._menu_sheet = tk.Menu(
+        # Creating 'Editor' menu...
+        self._menu_etitor = tk.Menu(
             master=self._menubar,
             tearoff=0)
         self._menubar.add_cascade(
-            label='Sheet',
-            menu=self._menu_sheet)
-        self._menu_sheet.add_cascade(
+            label='Editor',
+            menu=self._menu_etitor)
+        self._menu_etitor.add_cascade(
             label='Insert a row',
             menu=self._menu_insertRow)
-        self._menu_sheet.add_separator()
-        self._menu_sheet.add_command(
+        self._menu_etitor.add_separator()
+        self._menu_etitor.add_command(
             label='Paste clipboard',
             command=self._PasteClipboard)
         
@@ -176,6 +252,8 @@ class Mp3LyricsWin(tk.Tk):
             state=tk.DISABLED,
             command=self._PlayPauseMp3)
         self._btn_palyPause.pack(side=tk.LEFT)
+
+        #
         
         #
         self._lbl_volume = ttk.Label(
@@ -241,10 +319,48 @@ class Mp3LyricsWin(tk.Tk):
             text='Player')
         
         #
-        self._trvw_mp3s = ttk.Treeview(
+        self._frm_mp3s = ttk.Frame(
             master=self._frm_player)
-        self._trvw_mp3s.grid(
+        self._frm_mp3s.columnconfigure(
+            index=0,
+            weight=1)
+        self._frm_mp3s.rowconfigure(
+            index=0,
+            weight=1)
+        self._frm_mp3s.grid(
             column=1,
+            row=0,
+            sticky=tk.NSEW)
+        
+        #
+        self._hscrlbr_mp3s = ttk.Scrollbar(
+            master=self._frm_mp3s,
+            orient='horizontal')
+        self._vscrlbr_mp3s = ttk.Scrollbar(
+            master=self._frm_mp3s,
+            orient='vertical')
+        self._trvw_mp3s = TreeviewMp3(
+            master=self._frm_mp3s,
+            image=self._IMG_MP3,
+            select_callback=self._InitPlayer,
+            xscrollcommand=self._hscrlbr_mp3s.set,
+            yscrollcommand=self._vscrlbr_mp3s.set)
+        self._trvw_mp3s.grid(
+            column=0,
+            row=0,
+            sticky=tk.NSEW)
+        self._hscrlbr_mp3s['command'] = self._trvw_mp3s.xview
+        self._vscrlbr_mp3s['command'] = self._trvw_mp3s.yview
+        self._hscrlbr_mp3s.grid(
+            column=0,
+            row=1,
+            sticky=tk.EW)
+        self._vscrlbr_mp3s.grid(
+            column=1,
+            row=0,
+            sticky=tk.NS)
+        self._trvw_mp3s.grid(
+            column=0,
             row=0,
             sticky=tk.NSEW)
         
@@ -298,6 +414,16 @@ class Mp3LyricsWin(tk.Tk):
             command=self._OnClosingWin)
         self._btn_cancel.pack(side=tk.RIGHT)
 
+        #
+        self._wtfrm_mp3s = WaitFrame(
+            master=self._trvw_mp3s,
+            wait_gif=self._IMG_WAIT)
+        
+        #
+        self._wtfrm_lrc = WaitFrame(
+            master=self._sheet,
+            wait_gif=self._IMG_WAIT)
+
     def _InitPygame(self) -> None:
         # Initializing the 'pygame.mixer' module...
         init()
@@ -307,12 +433,63 @@ class Mp3LyricsWin(tk.Tk):
         mp3File = askopenfilename(
             filetypes=[
                 ('MP3 files', '*.mp3'),
-                ('Lyrics files', '*.lrc')])
+                ('Lyrics files', '*.lrc')],
+            initialdir=self._lastDir)
         if mp3File:
             self._InitPlayer(mp3File)
+            self._LoadFolder(mp3File)
+            self._LoadLrc(mp3File)
+    
+    def _LoadFolder(self, folder: str) -> None:
+        future = self._asyncThrd.LoadFolder(folder)
+        self._wtfrm_mp3s.Show()
+        afterID = self.after(
+            self._TIME_INTERVAL,
+            self._LoadFolder_after)
+        self._loadingFolder = AfterProcessInfo(future, afterID)
+    
+    def _LoadFolder_after(self) -> None:
+        if self._loadingFolder.future.done():
+            self._wtfrm_mp3s.Hide()
+            try:
+                folderInfo = self._loadingFolder.future.result()
+                self._trvw_mp3s.AddFilenames(
+                    folderInfo.folder,
+                    folderInfo.mp3s,
+                    folderInfo.selectIdx)
+            finally:
+                self._loadingFolder = None
+                self._lastDir = folderInfo.folder
+        else:
+            self._loadingFolder.afterID = self.after(
+                self._TIME_INTERVAL,
+                self._LoadFolder_after)
+    
+    def _LoadLrc(self, mp3_file: str) -> None:
+        future = self._asyncThrd.LoadLrc(
+            Lrc.GetLrcFilename(mp3_file))
+        self._wtfrm_lrc.Show()
+        afterID = self.after(
+            self._TIME_INTERVAL,
+            self._LoadLrc_after)
+        self._loadingLrc = AfterProcessInfo(future, afterID)
+
+    def _LoadLrc_after(self) -> None:
+        if self._loadingLrc.future.done():
+            self._wtfrm_lrc.Hide()
+            try:
+                self._lrc = self._loadingLrc.future.result()
+                print(self._lrc)
+            finally:
+                self._loadingLrc = None
+        else:
+            self._loadingLrc.afterID = self.after(
+                self._TIME_INTERVAL,
+                self._LoadLrc_after)
     
     def _InitPlayer(self, mp3_file: str) -> None:
         self._btn_palyPause['state'] = tk.NORMAL
+        music.stop()
         music.load(mp3_file)
         mp3 = MP3(mp3_file)
         self._slider_playTime['to'] = mp3.info.length
@@ -346,8 +523,8 @@ class Mp3LyricsWin(tk.Tk):
         # Checking whether the MP3 has finished or not...
         for event in pygame.event.get():
             if event.type == self._MUSIC_END:
-                # The MP3 finished, resetting the Play Time slider...
-                self._ResetPlayTimeSlider()
+                # The MP3 finished, deciding on the action...
+                self._DecideAfterPlayed()
                 break
         else:
             # The MP3 not finished
@@ -357,6 +534,23 @@ class Mp3LyricsWin(tk.Tk):
                 self._TIME_INTRVL,
                 self._UpdatePlayTimeSlider,
                 start_offset)
+    
+    def _DecideAfterPlayed(self) -> None:
+        match self._afterPlayed.get():
+            case int(AfterPlayed.STOP_PLAYING):
+                self._ResetPlayTimeSlider()
+            case int(AfterPlayed.REPEAT):
+                music.rewind()
+                music.play()
+                self._slider_playTime.set(0)
+                self._playAfterID = self.after(
+                    self._TIME_INTRVL,
+                    self._UpdatePlayTimeSlider,
+                    0)
+            case int(AfterPlayed.PLAY_FOLDER):
+                pass
+            case int(AfterPlayed.REPEAT_FOLDER):
+                pass
     
     def _ResetPlayTimeSlider(self) -> None:
         self._isPlaying = False
@@ -397,14 +591,15 @@ class Mp3LyricsWin(tk.Tk):
     def _ReadSettings(self) -> None:
         # Considering Duplicate Finder Window (DFW) default settings...
         defaults = {
-            'LEW_WIDTH': 900,
-            'LEW_HEIGHT': 600,
-            'LEW_X': 200,
-            'LEW_Y': 200,
-            'LEW_STATE': 'normal',
-            'LEW_VOLUME': 5.0,
-            'LEW_TS_COL_WIDTH': 150,
-            'LEW_LT_COL_WIDTH': 300,}
+            'MLW_WIDTH': 900,
+            'MLW_HEIGHT': 600,
+            'MLW_X': 200,
+            'MLW_Y': 200,
+            'MLW_STATE': 'normal',
+            'MLW_LAST_DIR': None,
+            'MLW_VOLUME': 5.0,
+            'MLW_TS_COL_WIDTH': 150,
+            'MLW_LT_COL_WIDTH': 300,}
         return AppSettings().Read(defaults)
 
     def _OnClosingWin(self) -> None:
@@ -415,7 +610,7 @@ class Mp3LyricsWin(tk.Tk):
 
         # Saving settings...
         settings = {}
-        # Getting the geometry of the Lyrics Editor Window (LEW)...
+        # Getting the geometry of the MP3 Lyrics Window (MLW)...
         w_h_x_y = self.winfo_geometry()
         GEOMETRY_REGEX = r"""
             (?P<width>\d+)    # The width of the window
@@ -427,20 +622,21 @@ class Mp3LyricsWin(tk.Tk):
             w_h_x_y,
             re.VERBOSE)
         if match:
-            settings['LEW_WIDTH'] = int(match.group('width'))
-            settings['LEW_HEIGHT'] = int(match.group('height'))
-            settings['LEW_X'] = int(match.group('x'))
-            settings['LEW_Y'] = int(match.group('y'))
+            settings['MLW_WIDTH'] = int(match.group('width'))
+            settings['MLW_HEIGHT'] = int(match.group('height'))
+            settings['MLW_X'] = int(match.group('x'))
+            settings['MLW_Y'] = int(match.group('y'))
         else:
             logging.error(
                 'Cannot get the geometry of Duplicate Finder Window.')
         
-        # Getting other Duplicate Finder Window (DFW) settings...
-        settings['LEW_STATE'] = self.state()
-        settings['LEW_VOLUME'] = self._slider_volume.get()
+        # Getting other MP3 Lyrics Window (MLW) settings...
+        settings['MLW_STATE'] = self.state()
+        settings['MLW_LAST_DIR'] = self._lastDir
+        settings['MLW_VOLUME'] = self._slider_volume.get()
         colsWidth = self._sheet.get_column_widths()
-        settings['LEW_TS_COL_WIDTH'] = colsWidth[0]
-        settings['LEW_LT_COL_WIDTH'] = colsWidth[1]
+        settings['MLW_TS_COL_WIDTH'] = colsWidth[0]
+        settings['MLW_LT_COL_WIDTH'] = colsWidth[1]
 
         AppSettings().Update(settings)
         self.destroy()

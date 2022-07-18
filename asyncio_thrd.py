@@ -1,13 +1,12 @@
 import asyncio
 from asyncio import Future
-from fractions import Fraction
 from pathlib import Path
 import sys
 from threading import Thread
-from typing import Any, Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping
 
-from mutagen import MutagenError
-from mutagen.mp3 import MP3
+from lrc import Lrc
+from win_utils import LoadingFolderInfo
 
 
 class AsyncioThrd(Thread):
@@ -21,6 +20,7 @@ class AsyncioThrd(Thread):
             *,
             daemon: bool | None = None
             ) -> None:
+
         super().__init__(
             group,
             target,
@@ -57,46 +57,40 @@ class AsyncioThrd(Thread):
         self._running = False
         self.loop.call_soon_threadsafe(self.loop.stop)
     
-    '''def LoadMp3Files(
+    def LoadFolder(
             self,
-            folder: str,
-            columns: list[AbstractSheetColumn],
-            callback: Optional[Callable[[Fraction], None]] = None,
-            ) -> Future[tuple[list[SheetRow], list[str]]]:
-        """Accepts a directory and returns a pair of a list of ID3 tag
-        of MP3 files in the directory and a list of filenames of MP3
-        files which could not be read.
-        """
+            mp3_file: str
+            ) -> Future[LoadingFolderInfo]:
         return asyncio.run_coroutine_threadsafe(
-            self._LoadMp3Files(
-                folder,
-                columns,
-                callback),
+            self._LoadFolder(mp3_file),
             self.loop)
 
-    async def _LoadMp3Files(
+    async def _LoadFolder(
             self,
-            folder: str,
-            columns: list[AbstractSheetColumn],
-            callback: Optional[Callable[[Fraction], None]] = None,
-            ) ->Future[tuple[list[SheetRow], list[str]]]:
+            mp3_file: str
+            ) -> Future[LoadingFolderInfo]:
+        mp3PathObj = Path(mp3_file).resolve()
+        # Getting folder...
+        folder = str(mp3PathObj.parent)
+        # Getting MP3 files in the folder...
+        mp3s = list(Path(folder).glob('*.mp3'))
+        mp3s = [
+            path.name
+            for path in mp3s]
+        # Getting the index of selected MP3 file...
+        try:
+            selectIdx = mp3s.index(mp3PathObj.name)
+        except ValueError:
+            selectIdx = None
+        return LoadingFolderInfo(
+            folder=folder,
+            mp3s=mp3s,
+            selectIdx=selectIdx)
+    
+    def LoadLrc(self, lrc_file: str) -> Lrc:
+        return asyncio.run_coroutine_threadsafe(
+            self._LoadLrc(lrc_file),
+            self.loop)
 
-        audios: list[SheetRow] = []
-        errs: list[str] = []
-        files = list(Path(folder).glob('*.mp3'))
-        if not files:
-            return audios, errs
-        # Informing the start of the operation...
-        if callback:
-            callback(Fraction(0))
-        idx = 0
-        for file in files:
-            try:
-                mp3 = MP3(file)
-                audios.append(SheetRow(mp3, columns))
-            except MutagenError:
-                errs.append(file)
-            idx += 1
-            if callback:
-                callback(Fraction(idx, len(files)))
-        return audios, errs'''
+    async def _LoadLrc(self, lrc_file: str) -> Lrc:
+        return Lrc(lrc_file)

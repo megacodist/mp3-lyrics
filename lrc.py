@@ -119,7 +119,7 @@ class LyricsItem:
 
 class Lrc:
     """Parses and manipulates LRC files. To load an LRC file, you must pass
-    its file system address to either the constructor or Load method.
+    its file system address to the constructor.
     """
     TAGS: list[str] = [
         'ar',
@@ -131,6 +131,18 @@ class Lrc:
         'by',
         're',
         've',]
+    
+    @classmethod
+    def GetLrcFilename(cls, filename: str) -> str:
+        """Returns the probably LRC file name associated with 'filename'
+        parameter. This LRC file might exist or not.
+        """
+        pathObj = Path(filename)
+        extLength = len(pathObj.suffix)
+        if extLength:
+            return filename[:-extLength] + '.lrc'
+        else:
+            return filename + '.lrc'
 
     def __init__(
             self,
