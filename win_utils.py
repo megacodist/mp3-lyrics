@@ -1,12 +1,26 @@
-from asyncio import Future
+from concurrent.futures import Future
+from email.policy import default
 
 from attrs import define, field
 
+from widgets import WaitFrame
 
-@define
+
 class AfterProcessInfo:
-    future: Future
-    afterID: str
+    def __init__(
+            self,
+            future : Future,
+            afterID: str,
+            waitFrame: WaitFrame | None = None
+            ) -> None:
+        self.future = future
+        self.afterID = afterID
+        self.waitFrame = waitFrame
+    
+    def __del__(self) -> None:
+        self.waitFrame = None
+        del self.future
+        del self.afterID
 
 
 @define

@@ -1,9 +1,10 @@
 import asyncio
-from asyncio import Future
+from concurrent.futures import ProcessPoolExecutor, Future
+from concurrent.futures import CancelledError
 from pathlib import Path
 import sys
 from threading import Thread
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Coroutine, Iterable, Mapping
 
 from lrc import Lrc
 from win_utils import LoadingFolderInfo
@@ -93,4 +94,11 @@ class AsyncioThrd(Thread):
             self.loop)
 
     async def _LoadLrc(self, lrc_file: str) -> Lrc:
-        return Lrc(lrc_file)
+        with ProcessPoolExecutor() as pPool:
+            try:
+                return await self.loop.run_in_executor(
+                    pPool,
+                    Lrc,
+                    lrc_file)
+            except CancelledError:
+                pass

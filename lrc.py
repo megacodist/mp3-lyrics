@@ -16,7 +16,7 @@ class Timestamp:
         """Converts strings in the form of mm:ss.xx to an instance of
         Timestamp. In the case of failure it returns None.
         """
-        TIMESTAMP_REGEX = r'^(?P<mm>\d+):(?P<ss>\d+)\.(?P<xx>\d+)$'
+        TIMESTAMP_REGEX = r'^(?P<mm>\d+):(?P<ss>\d+)(?P<xx>\.\d+)$'
         timeMatch = re.match(
             TIMESTAMP_REGEX,
             timestamp)
@@ -66,8 +66,11 @@ class Timestamp:
         self.milliseconds = milliseconds
 
     def __str__(self) -> str:
-        xx = f'{xx:.2f}'.lstrip('0')
+        xx = str(self.milliseconds).lstrip('0')
         return f'{self.minutes:02}:{self.seconds:02}{xx}'
+    
+    def __repr__(self) -> str:
+        return f'<{self.__class__.} object {str(self)}>'
     
     def __lt__(self, timestamp: Timestamp) -> bool:
         a = (self.minutes, self.seconds, self.milliseconds,)
@@ -104,7 +107,7 @@ class _LrcErrors(IntFlag):
     No_ERROR = 0
     DUPLICATE_TAGS = 1
     UNKNOWN_TAGS = 2
-    BAD_CONTENTS = 4
+    BAD_DATA = 4
     NO_TIMESTAMP = 8
     BAD_LAYOUT = 16
     OUT_OF_ORDER = 32
@@ -179,43 +182,46 @@ class Lrc:
         for line in lines:
             bracMatch = bracPattern.match(line)
             if not bracMatch:
-                self._errors |= _LrcErrors.NO_TIMESTAMP
-                self.lyrics.append(LyricsItem(line.strip()))
-                nonTagMatched = True
+                data = line.strip()
+                if data:
+                    self._errors |= _LrcErrors.NO_TIMESTAMP
+                    self.lyrics.append(LyricsItem(line.strip()))
+                    nonTagMatched = True
             else:
                 prefix = bracMatch['prefix'].strip()
                 if prefix:
-                    self._errors |= _LrcErrors.BAD_CONTENTS
+                    self._errors |= _LrcErrors.BAD_DATA
                 else:
                     inside = bracMatch['inside']
-                    tagMatch = tagPattern.match(inside)
-                    if tagMatch:
-                        tag = tagMatch['tag']
-                        if tag not in Lrc.TAGS:
-                            self._errors |= _LrcErrors.UNKNOWN_TAGS
-                            self._unknownTags[tag] = tagMatch['value']
-                        elif tag in self.tags:
-                            self._errors |= _LrcErrors.DUPLICATE_TAGS
-                            self.tags[tag] = tagMatch['value']
-                        else:
-                            self.tags[tag] = tagMatch['value']
-                        if nonTagMatched:
-                            self._errors |= _LrcErrors.BAD_LAYOUT
+                    # Matching against timestamp (mm:ss.xx)...
+                    timestamp = Timestamp.FromString(inside)
+                    if timestamp:
+                        self.lyrics.append(LyricsItem(
+                            timestamp=timestamp,
+                            text=bracMatch['suffix']))
+                        nonTagMatched = True
                     else:
-                        # Matching against mm:ss.xx...
-                        timestamp = Timestamp.FromString(inside)
-                        if timestamp:
-                            self.lyrics.append(LyricsItem(
-                                timestamp=timestamp,
-                                text=bracMatch['suffix']))
-                            nonTagMatched = True
+                        # Matching agianst tag pattern...
+                        tagMatch = tagPattern.match(inside)
+                        if tagMatch:
+                            tag = tagMatch['tag']
+                            if tag not in Lrc.TAGS:
+                                self._errors |= _LrcErrors.UNKNOWN_TAGS
+                                self._unknownTags[tag] = tagMatch['value']
+                            elif tag in self.tags:
+                                self._errors |= _LrcErrors.DUPLICATE_TAGS
+                                self.tags[tag] = tagMatch['value']
+                            else:
+                                self.tags[tag] = tagMatch['value']
+                            if nonTagMatched:
+                                self._errors |= _LrcErrors.BAD_LAYOUT
                         elif not inside:
                             self._errors |= _LrcErrors.NO_TIMESTAMP
                             self.lyrics.append(LyricsItem(
                                 text=bracMatch['suffix']))
                             nonTagMatched = True
                         else:
-                            self._errors |= _LrcErrors.BAD_CONTENTS
+                            self._errors |= _LrcErrors.BAD_DATA
         
         # Looking for out of order timestamps...
         idx = 0
@@ -224,15 +230,26 @@ class Lrc:
                 prevTime = self.lyrics[idx].timestamp
                 idx += 1
                 break
+            idx += 1
         while idx < len(self.lyrics):
             if self.lyrics[idx].timestamp <= prevTime:
                 self._errors |= _LrcErrors.OUT_OF_ORDER
                 break
             else:
                 prevTime = self.lyrics[idx].timestamp
+            idx += 1
 
     def Save(self) -> None:
         raise NotImplementedError()
     
     def errors(self) -> list[str]:
         raise NotImplementedError()
+    
+    def __repr__(self) -> str:
+        return (
+            f'{super().__repr__()}'
+            + f'\nFile name: {self.filename}'
+            + f'\nErrors: {self._errors.name}'
+            + f'\nTags: {self.tags}'
+            + f'\nUnknown tags: {self._unknownTags}'
+            + f'\nLyrics: {self.lyrics}')

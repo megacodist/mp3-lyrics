@@ -28,13 +28,14 @@ class TreeviewMp3(ttk.Treeview):
         self.heading('#0', anchor=tk.W)
         self.column(
             '#0',
-            width=240,
+            width=200,
             stretch=False,
             anchor=tk.W)
         
         self._IMG = image
         self._dir: str | None
         self._selectCallback = select_callback
+        self._noSelectCallback: bool
 
         self.bind(
             '<<TreeviewSelect>>',
@@ -46,13 +47,13 @@ class TreeviewMp3(ttk.Treeview):
             filenames: list[str],
             select_idx: int | None = None
             ) -> None:
-
+        
         self._dir = folder
         # Writing folder in the heading...
         self.heading('#0', text=folder)
         # Adding filenames...
         self._Clear()
-        minColWidth = self.winfo_width()
+        minColWidth = self.winfo_width() - 4
         for filename in filenames:
             itemWidth = 40 + self._font.measure(filename)
             if itemWidth > minColWidth:
@@ -65,6 +66,7 @@ class TreeviewMp3(ttk.Treeview):
         # Setting the minimu width of the column...
         self.column('#0', width=minColWidth)
         # Selecting the specified file...
+        self._noSelectCallback = True
         if select_idx is not None:
             self.selection_add(
                 self.get_children('')[select_idx])
@@ -77,11 +79,14 @@ class TreeviewMp3(ttk.Treeview):
             self.delete(iid)
     
     def _OnItemSelectionChanged(self, event: tk.Event) -> None:
-        selectedItemID = self.selection()
-        if selectedItemID:
-            text = self.item(selectedItemID[0], option='text')
-            self._selectCallback(
-                str(Path(self._dir) / text))
+        if self._noSelectCallback:
+            self._noSelectCallback = False
+        else:
+            selectedItemID = self.selection()
+            if selectedItemID:
+                text = self.item(selectedItemID[0], option='text')
+                self._selectCallback(
+                    str(Path(self._dir) / text))
 
 
 class WaitFrame(ttk.Frame):
@@ -89,14 +94,17 @@ class WaitFrame(ttk.Frame):
             self,
             master: tk.Misc,
             wait_gif: list[PhotoImage],
+            cancel_callback: Callable[[], None],
             **kwargs
             ) -> None:
         super().__init__(master, **kwargs)
 
         self._master = master
+        self._IMG_WAIT = wait_gif
+        self._cancelCallback = cancel_callback
+
         self._afterID: str | None = None
         self._TIME_INTERVAL = 40
-        self._IMG_WAIT = wait_gif
 
         self.columnconfigure(
             index=0,
@@ -118,7 +126,8 @@ class WaitFrame(ttk.Frame):
         #
         self._btn_cancel = ttk.Button(
             master=self,
-            text='Cancel')
+            text='Cancel',
+            command=self._Cancel)
         self._btn_cancel.grid(
             column=0,
             row=1,
@@ -126,10 +135,6 @@ class WaitFrame(ttk.Frame):
             pady=(4, 8,))
     
     def Show(self) -> None:
-        parentWidth = self._master.winfo_width()
-        parentHeight = self.winfo_height()
-        width = self.winfo_width()
-        height = self.winfo_height()
         self.place(
             relx=0.5,
             rely=0.5,
@@ -139,9 +144,15 @@ class WaitFrame(ttk.Frame):
             self._AnimateGif,
             1)
 
-    def Hide(self) -> None:
+    def Close(self) -> None:
         self.after_cancel(self._afterID)
+        self._cancelCallback = None
         self.place_forget()
+    
+    def _Cancel(self) -> None:
+        self._btn_cancel['text'] = 'Canceling...'
+        self._btn_cancel['state'] = tk.DISABLED
+        self._cancelCallback()
     
     def _AnimateGif(self, idx: int) -> None:
         try:
