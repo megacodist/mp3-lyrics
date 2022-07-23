@@ -1,5 +1,6 @@
 from concurrent.futures import CancelledError, Future
 from enum import IntEnum
+from functools import partial
 import logging
 from pathlib import Path
 from pprint import pprint
@@ -20,8 +21,7 @@ from tksheet import Sheet
 from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
 from lrc import Lrc
-from widgets import MessageType, MessageView, LrcView, TreeviewMp3, WaitFrame
-from widgets import LyricsEditor
+from widgets import TreeviewMp3, WaitFrame
 from win_utils import AfterProcessInfo
 
 
@@ -90,9 +90,6 @@ class Mp3LyricsWin(tk.Tk):
         self._sheet.set_column_widths([
             settings['MLW_TS_COL_WIDTH'],
             settings['MLW_LT_COL_WIDTH']])
-        self._pwin_info.sashpos(0, settings['MLW_INFO_EVENTS_WIDTH'])
-        self.update_idletasks()
-        self._pwin_player.sashpos(0, settings['MLW_LRC_VIEW_WIDTH'])
         
         # Loading the lyrics for this MP3 if any...
         self._LoadLyrics()
@@ -226,16 +223,8 @@ class Mp3LyricsWin(tk.Tk):
             command=self._PasteClipboard)
         
         #
-        self._pwin_info = ttk.PanedWindow(
-            master=self,
-            orient=tk.HORIZONTAL)
-        self._pwin_info.pack(
-            fill=tk.BOTH,
-            expand=1)
-        
-        #
         self._frm_container = ttk.Frame(
-            master=self._pwin_info)
+            master=self)
         self._frm_container.rowconfigure(
             index=2,
             weight=1)
@@ -245,35 +234,8 @@ class Mp3LyricsWin(tk.Tk):
         self._frm_container.pack(
             padx=7,
             pady=7,
-            side=tk.LEFT,
-            fill=tk.Y)
-        self._pwin_info.add(
-            self._frm_container,
-            weight=1)
-        
-        #
-        self._ntbk_infoEvents = ttk.Notebook(
-            master=self._pwin_info)
-        self._ntbk_infoEvents.pack(
-            side=tk.RIGHT,
-            fill=tk.Y)
-        self._pwin_info.add(
-            self._ntbk_infoEvents,
-            weight=1)
-        
-        #
-        self._eventsvw = MessageView(
-            master=self._ntbk_infoEvents)
-        self._ntbk_infoEvents.add(
-            self._eventsvw,
-            text='Events')
-        
-        #
-        self._trvw_info = ttk.Treeview(
-            master=self._ntbk_infoEvents)
-        self._ntbk_infoEvents.add(
-            self._trvw_info,
-            text='Info')
+            fill=tk.BOTH,
+            expand=1)
         
         #
         self._frm_controls = ttk.Frame(
@@ -293,6 +255,8 @@ class Mp3LyricsWin(tk.Tk):
             command=self._PlayPauseMp3)
         self._btn_palyPause.pack(side=tk.LEFT)
 
+        #
+        
         #
         self._lbl_volume = ttk.Label(
             master=self._frm_controls,
@@ -341,39 +305,34 @@ class Mp3LyricsWin(tk.Tk):
             expand=1)
         
         #
-        self._pwin_player = ttk.PanedWindow(
-            master=self._notebook,
-            orient=tk.HORIZONTAL)
+        self._frm_player = ttk.Frame(
+            master=self._notebook)
+        self._frm_player.columnconfigure(
+            index=0,
+            weight=2)
+        self._frm_player.columnconfigure(
+            index=1,
+            weight=1)
+        self._frm_player.rowconfigure(
+            index=0,
+            weight=1)
         self._notebook.add(
-            self._pwin_player,
+            self._frm_player,
             text='Player')
         
         #
-        self._lrcvw = LrcView(
-            master=self._pwin_player,
-            width=200)
-        self._lrcvw.pack(
-            side=tk.LEFT,
-            fill=tk.Y)
-        self._pwin_player.add(
-            self._lrcvw,
-            weight=1)
-        
-        #
         self._frm_mp3s = ttk.Frame(
-            master=self._pwin_player)
+            master=self._frm_player)
         self._frm_mp3s.columnconfigure(
             index=0,
             weight=1)
         self._frm_mp3s.rowconfigure(
             index=0,
             weight=1)
-        self._frm_mp3s.pack(
-            side=tk.RIGHT,
-            fill=tk.Y)
-        self._pwin_player.add(
-            self._frm_mp3s,
-            weight=1)
+        self._frm_mp3s.grid(
+            column=1,
+            row=0,
+            sticky=tk.NSEW)
         
         #
         self._hscrlbr_mp3s = ttk.Scrollbar(
@@ -415,8 +374,20 @@ class Mp3LyricsWin(tk.Tk):
             text='Editor')
         
         #
-        self._sheet = LyricsEditor(
+        self._sheet = Sheet(
             self._frm_editor)
+        self._sheet.headers([
+            'Timestap',
+            'Lyrics/text'])
+        self._sheet.insert_row(
+            values=('', '',))
+        self._sheet.enable_bindings(
+            'row_select',
+            'drag_select',
+            'single_select',
+            'column_width_resize',
+            'double_click_column_resize',
+            'edit_cell')
         self._sheet.pack(
             fill=tk.BOTH,
             expand=1)
@@ -470,7 +441,6 @@ class Mp3LyricsWin(tk.Tk):
             self._TIME_INTERVAL,
             self._LoadFolder_after)
         self._loadingFolder = AfterProcessInfo(future, afterID, waitFrame)
-        self._loadingFolder.folder = folder
         self._loadingFolder.waitFrame.Show()
     
     def _LoadFolder_after(self) -> None:
@@ -517,7 +487,6 @@ class Mp3LyricsWin(tk.Tk):
                 self._TIME_INTERVAL,
                 self._LoadLrc_after)
             self._loadingLrc = AfterProcessInfo(future, afterID, waitFrame)
-            self._loadingLrc.mp3File = mp3_file
             self._loadingLrc.waitFrame.Show()
         else:
             self._LoadLrc_cancel(mp3_file)
@@ -528,11 +497,8 @@ class Mp3LyricsWin(tk.Tk):
             try:
                 self._lrc = self._loadingLrc.future.result()
                 pprint(self._lrc)
-            except FileNotFoundError as err: 
-                self._eventsvw.AddMessage(
-                    f"'{self._loadingLrc.mp3File}' does not have associated LRC.",
-                    'No LRC',
-                    MessageType.ERROR)
+            except FileNotFoundError as err:
+                showerror(message=str(err))
             except CancelledError:
                 pass
             finally:
@@ -682,9 +648,7 @@ class Mp3LyricsWin(tk.Tk):
             'MLW_VOLUME': 5.0,
             'MLW_TS_COL_WIDTH': 150,
             'MLW_LT_COL_WIDTH': 300,
-            'MLW_AFTER_PLAYED': 0,
-            'MLW_INFO_EVENTS_WIDTH': 200,
-            'MLW_LRC_VIEW_WIDTH': 200,}
+            'MLW_AFTER_PLAYED': 0,}
         return AppSettings().Read(defaults)
 
     def _OnClosingWin(self) -> None:
@@ -723,8 +687,6 @@ class Mp3LyricsWin(tk.Tk):
         settings['MLW_TS_COL_WIDTH'] = colsWidth[0]
         settings['MLW_LT_COL_WIDTH'] = colsWidth[1]
         settings['MLW_AFTER_PLAYED'] = self._afterPlayed.get()
-        settings['MLW_INFO_EVENTS_WIDTH'] = self._pwin_info.sashpos(0)
-        settings['MLW_LRC_VIEW_WIDTH'] = self._pwin_player.sashpos(0)
 
         AppSettings().Update(settings)
         self.destroy()

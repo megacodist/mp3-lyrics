@@ -70,7 +70,7 @@ class Timestamp:
         return f'{self.minutes:02}:{self.seconds:02}{xx}'
     
     def __repr__(self) -> str:
-        return f'<{self.__class__.} object {str(self)}>'
+        return f'<{self.__class__} object {str(self)}>'
     
     def __lt__(self, timestamp: Timestamp) -> bool:
         a = (self.minutes, self.seconds, self.milliseconds,)

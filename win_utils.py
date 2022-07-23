@@ -1,5 +1,4 @@
 from concurrent.futures import Future
-from email.policy import default
 
 from attrs import define, field
 
