@@ -44,26 +44,54 @@ class Timestamp:
             seconds: int = 0,
             milliseconds: float = 0.0
             ) -> None:
-        # Setting minutes attribute...
-        if not isinstance(minutes, int):
-            raise TypeError("'minutes' must be an integer")
-        if minutes < 0:
-            raise ValueError("'minutes' must be positive")
+        self._minutes: int
+        self._seconds: int
+        self._milliseconds: float
+
+        # Setting attribute...
         self.minutes = minutes
-
-        # Setting seconds attribute...
-        if not isinstance(seconds, int):
-            raise TypeError("'seconds' must be an integer")
-        if not (0 <= seconds < 60):
-            raise ValueError("0 <= seconds < 60 must be true")
         self.seconds = seconds
-
-        # Setting milliseconds attribute...
-        if not isinstance(milliseconds, float):
-            raise TypeError("'milliseconds' must be a floating-point number")
-        if not (0.0 <= milliseconds < 1.0):
-            raise ValueError("0.0 <= milliseconds < 1.0 must be true")
         self.milliseconds = milliseconds
+    
+    @property
+    def minutes(self) -> int:
+        return self._minutes
+    
+    @minutes.setter
+    def minutes(self, __mm: int) -> None:
+        # Setting minutes attribute...
+        if not isinstance(__mm, int):
+            raise TypeError("'minutes' must be an integer")
+        if __mm < 0:
+            raise ValueError("'minutes' must be positive")
+        self._minutes = __mm
+    
+    @property
+    def seconds(self) -> None:
+        return self._seconds
+    
+    @seconds.setter
+    def seconds(self, __ss: int) -> None:
+        if not isinstance(__ss, int):
+            raise TypeError("'seconds' must be an integer")
+        if not (0 <= __ss < 60):
+            raise ValueError("0 <= seconds < 60 must be true")
+        self._seconds = __ss
+    
+    @property
+    def milliseconds(self) -> float:
+        return self._milliseconds
+    
+    @milliseconds.setter
+    def milliseconds(self, __xx: float) -> None:
+        if not isinstance(__xx, float):
+            raise TypeError("'milliseconds' must be a floating-point number")
+        if not (0.0 <= __xx < 1.0):
+            raise ValueError("0.0 <= milliseconds < 1.0 must be true")
+        self._milliseconds = __xx
+    
+    def ToFloat(self) -> float:
+        return 60 * self._minutes + self._seconds + self._milliseconds
 
     def __str__(self) -> str:
         xx = str(self.milliseconds).lstrip('0')
@@ -113,11 +141,27 @@ class _LrcErrors(IntFlag):
     OUT_OF_ORDER = 32
 
 
-@attrs.define
 class LyricsItem:
-    text: str
-    timestamp: Timestamp | None = attrs.field(
-        default=None)
+    def __init__(
+            self,
+            text: str,
+            timestamp: Timestamp | None = None
+            ) -> None:
+        self.text = text
+        self.timestamp = timestamp
+    
+    def __getitem__(self, __value: int) -> str | Timestamp:
+        """Returns timestamp attribute for 0 and text for 1. For any other
+        values, it raises TypeError or ValueError.
+        """
+        if not isinstance(__value, int):
+            raise TypeError('Index must be an integer')
+        if __value == 0:
+            return self.timestamp if self.timestamp is not None else ''
+        elif __value == 1:
+            return self.text
+        else:
+            raise ValueError('Index is only allowed to be 0 or 1')
 
 
 class Lrc:

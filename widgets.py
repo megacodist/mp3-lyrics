@@ -9,6 +9,8 @@ from PIL.ImageTk import PhotoImage
 from tkhtmlview import HTMLLabel
 from tksheet import Sheet
 
+from lrc import LyricsItem
+
 
 class MessageType(IntEnum):
     INFO = 0
@@ -97,7 +99,6 @@ class TreeviewMp3(ttk.Treeview):
                 self._selectCallback(
                     str(Path(self._dir) / text))
 
-
 class WaitFrame(ttk.Frame):
     def __init__(
             self,
@@ -107,6 +108,7 @@ class WaitFrame(ttk.Frame):
             **kwargs
             ) -> None:
         super().__init__(master, **kwargs)
+        self['relief'] = tk.RIDGE
 
         self._master = master
         self._IMG_WAIT = wait_gif
@@ -180,9 +182,11 @@ class LyricsView(ttk.Frame):
             self,
             master: tk.Misc,
             highlightable: bool = False,
-            sepWidth: int = 3,
-            sepColor: str = 'black',
+            sepWidth: int = 1,
+            sepColor: str = 'thistle4',
             gap: int = 5,
+            ipadx: int = 5,
+            ipady: int = 5,
             **kwargs
             ) -> None:
         super().__init__(master, **kwargs)
@@ -193,8 +197,10 @@ class LyricsView(ttk.Frame):
         self._sepWidth = sepWidth
         self._sepColor = sepColor
         self._gap = gap
+        self._ipadx = ipadx
+        self._ipady = ipady
 
-        self._vscrllbr: ttk.Scrollbar
+        self._vscrlbr: ttk.Scrollbar
         self._cnvs: tk.Canvas
         self._msgs: list[tk.Message] = []
 
@@ -214,6 +220,8 @@ class LyricsView(ttk.Frame):
         self._cnvs.grid(
             column=0,
             row=0,
+            padx=self._ipadx,
+            pady=self._ipady,
             sticky=tk.NSEW)
         self._vscrlbr.grid(
             column=1,
@@ -247,6 +255,10 @@ class LyricsView(ttk.Frame):
     def gap(self) -> int:
         return self._gap
     
+    @property
+    def highlightable(self) -> bool:
+        return self._highlightable
+    
     def Highlight(self, idx: int) -> None:
         pass
 
@@ -256,57 +268,107 @@ class LyricsView(ttk.Frame):
             - 4
             + (int(self._cnvs['bd']) << 1))
     
-    def _GetInternalHeight(self) -> int:
+    def _GetHeight(self) -> int:
         return (
             self._cnvs.winfo_height()
             - 4
             + (int(self._cnvs['bd']) << 1))
     
     def _Redraw(self) -> None:
-        self._cnvs.delete('all')
+        if self._highlightable:
+            # We have to remove the scrollbar...
+            if self._vscrlbr.winfo_ismapped():
+                self._vscrlbr.grid_forget()
+        else:
+            # We have to be sure the scrollbar is mapped...
+            if not self._vscrlbr.winfo_ismapped():
+                self._vscrlbr.grid(
+                    column=1,
+                    row=1,
+                    sticky=tk.NSEW)
+
         cnvsWidth = self._GetWidth()
+        cnvsMidWidth = cnvsWidth >> 1
         cnvsHeight = self._GetHeight()
-        y = 0
-        if len(self._lyrics) < 1:
-            return
-        try:
-            idx = 0
-            # Changing the first Message widget...
-            self._msgs[idx]['text'] = self._lyrics[idx]
-            x = (cnvsWidth - self._msgs[idx].winfo_width()) >> 1
-            self._cnvs.create_window(
-                x,
-                y,
+        cnvsMidHeight = cnvsHeight >> 1
+
+        nMsgs = len(self._msgs)
+        nLyrics = len(self._lyrics)
+        idx = nMsgs
+        while idx < nLyrics:
+            msg = tk.Message(
+                master=self._cnvs,
                 anchor=tk.NW,
+                width=cnvsWidth)
+            self._msgs.append(msg)
+            self._cnvs.create_window(0, 0, window=msg)
+            idx += 1
+        if nMsgs < nLyrics:
+            self._cnvs.update_idletasks()
+        self._cnvs.delete('all')
+
+        if nLyrics <= 0:
+            # No lyrics to show, returning after clearing the canvas...
+            return
+        
+        # Drawing the first Message (lyric)...
+        y = cnvsMidHeight
+        self._msgs[0]['width'] = cnvsWidth
+        self._msgs[0]['text'] = self._lyrics[0]
+        self._cnvs.create_window(
+            cnvsMidWidth,
+            y,
+            anchor=tk.N,
+            window=self._msgs[0])
+        self._cnvs.update_idletasks()
+        y += self._msgs[0].winfo_height()
+        
+        # Drawing the rest of Messages (lyrics)...
+        for idx in range(1, nLyrics):
+            y += self._gap
+            self._cnvs.create_line(
+                0,
+                y,
+                cnvsWidth,
+                y,
+                fill=self._sepColor,
+                width=self._sepWidth)
+
+            y += (self._gap + self._sepWidth)
+            self._msgs[idx]['width'] = cnvsWidth
+            self._msgs[idx]['text'] = self._lyrics[idx]
+            self._cnvs.create_window(
+                cnvsMidWidth,
+                y,
+                anchor=tk.N,
                 window=self._msgs[idx])
+            self._cnvs.update_idletasks()
             y += self._msgs[idx].winfo_height()
-
-            # Changing the first the rest of Message widgets
-            # alongside their upper lines...
-            while idx < len(self._lyrics):
-                self._msgs[idx]['text'] = self._lyrics[idx]
-
-                # Drawing the upper line...
-                y += self._gap
-                self._cnvs.create_line(
+        
+        # Setting the scroll region...
+        if self._highlightable:
+            scrollRegion = (0, 0, cnvsWidth, y + cnvsMidHeight)
+        else:
+            if (y - cnvsMidHeight) < cnvsHeight:
+                halfDiff = (cnvsHeight - y + cnvsMidHeight) >> 1
+                scrollRegion = (
                     0,
-                    y,
+                    cnvsMidHeight - halfDiff,
                     cnvsWidth,
-                    y,
-                    fill=self._sepColor,
-                    width=self._sepWidth)
-
-                # Drawing the Message widget...
-                y += (self._gap + self._sepWidth)
-                x = (cnvsWidth - self._msgs[idx].winfo_width()) >> 1
-                self._cnvs.create_window(
-                    x,
-                    y,
-                    anchor=tk.NW,
-                    window=self._msgs[idx])
-        except IndexError:
-            pass
-        self._cnvs[]
+                    y + halfDiff)
+            else:
+                scrollRegion = (0, cnvsMidHeight, cnvsWidth, y)
+        self._cnvs['scrollregion'] = scrollRegion
+        self._cnvs.yview_moveto(0)
+    
+    def Clear(self) -> None:
+        """Clears the LyricsView."""
+        self.lyrics = []
+        self._cnvs['scrollregion'] = (
+            0,
+            0,
+            self._GetWidth(),
+            self._GetHeight())
 
         
 class MessageView(Frame):
@@ -333,6 +395,7 @@ class MessageView(Frame):
         except tk.TclError:
             self._font = nametofont('TkDefaultFont')
 
+        self._mouseInside: bool = False
         self._msgs: list[HTMLLabel] = []
         self.max_events = max_events
         self._padx = padx
@@ -341,6 +404,13 @@ class MessageView(Frame):
 
         self._InitGui()
         
+        # Bindings...
+        self.bind(
+            '<Enter>',
+            self._OnMouseEntered)
+        self.bind(
+            '<Leave>',
+            self._OnMouseLeft)
         self._cnvs.bind_all(
             '<MouseWheel>',
             self._OnMouseWheel)
@@ -371,10 +441,17 @@ class MessageView(Frame):
             row=0,
             sticky=tk.NSEW)
     
+    def _OnMouseEntered(self, _: tk.Event) -> None:
+        self._mouseInside = True
+    
+    def _OnMouseLeft(self, _: tk.Event) -> None:
+        self._mouseInside = False
+    
     def _OnMouseWheel(self, event: tk.Event) -> None:
-        self._cnvs.yview_scroll(
-            int(-1*(event.delta/120)),
-            'units')
+        if self._mouseInside:
+            self._cnvs.yview_scroll(
+                int(-1 * (event.delta / 120)),
+                'units')
     
     def _OnSizeChanged(self, event: tk.Event) -> None:
         width = (
@@ -460,16 +537,28 @@ class MessageView(Frame):
 
 
 class LyricsEditor(Sheet):
-    def __init__(self, parent, **kwargs) -> None:
+    def __init__(
+            self,
+            parent: tk.Misc,
+            changed: bool,
+            **kwargs
+            ) -> None:
         super().__init__(parent, **kwargs)
 
         self.headers([
             'Timestap',
             'Lyrics/text'])
         self.enable_bindings(
+            'row_drag_and_drop',
             'row_select',
             'drag_select',
             'single_select',
             'column_width_resize',
             'double_click_column_resize',
             'edit_cell')
+    
+    def Clear(self) -> None:
+        self.set_sheet_data([], reset_col_positions=False)
+    
+    def Populate(self, data: list[LyricsItem]) -> None:
+        self.set_sheet_data(data, reset_col_positions=False)
