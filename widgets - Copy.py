@@ -9,7 +9,7 @@ from PIL.ImageTk import PhotoImage
 from tkhtmlview import HTMLLabel
 from tksheet import Sheet
 
-from lrc import Lrc, LyricsItem
+from lrc import LyricsItem
 
 
 class MessageType(IntEnum):
@@ -18,7 +18,7 @@ class MessageType(IntEnum):
     ERROR = 2
 
 
-class FolderView(ttk.Treeview):
+class TreeviewMp3(ttk.Treeview):
     def __init__(
             self,
             master: tk.Tk,
@@ -46,7 +46,7 @@ class FolderView(ttk.Treeview):
         self._IMG = image
         self._dir: str | None
         self._selectCallback = select_callback
-        self._toIgnoreNextSelect: bool
+        self._noSelectCallback: bool
 
         self.bind(
             '<<TreeviewSelect>>',
@@ -77,7 +77,7 @@ class FolderView(ttk.Treeview):
         # Setting the minimu width of the column...
         self.column('#0', width=minColWidth)
         # Selecting the specified file...
-        self._toIgnoreNextSelect = True
+        self._noSelectCallback = True
         if select_idx is not None:
             self.selection_add(
                 self.get_children('')[select_idx])
@@ -85,13 +85,13 @@ class FolderView(ttk.Treeview):
         self.yview_moveto(select_idx / len(filenames))
 
     def _Clear(self) -> None:
-        """Makes the FolderView empty."""
+        """Makes the treeview empty."""
         for iid in self.get_children(''):
             self.delete(iid)
     
     def _OnItemSelectionChanged(self, event: tk.Event) -> None:
-        if self._toIgnoreNextSelect:
-            self._toIgnoreNextSelect = False
+        if self._noSelectCallback:
+            self._noSelectCallback = False
         else:
             selectedItemID = self.selection()
             if selectedItemID:
@@ -195,7 +195,6 @@ class LyricsView(ttk.Frame):
 
         self._lyrics: list[str] = []
         self._heights: list[int] = [0]
-        self._extraHeight: int
         self._idx = -1
         self._highlightable = highlightable
         self.highlightColor = highlightColor
@@ -205,18 +204,12 @@ class LyricsView(ttk.Frame):
         self._gap = gap
         self._ipadx = ipadx
         self._ipady = ipady
-        self._width: int
-        self._height: int
 
         self._vscrlbr: ttk.Scrollbar
         self._cnvs: tk.Canvas
         self._msgs: list[tk.Message] = []
 
         self._InitGui()
-
-        self._cnvs.bind(
-            '<Configure>',
-            self._OnSizeChanged)
     
     def _InitGui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -241,22 +234,11 @@ class LyricsView(ttk.Frame):
             sticky=tk.NSEW)
         
         msg = tk.Message(
-            master=self._cnvs,
-            justify=tk.CENTER)
+            master=self._cnvs)
         self._msgs.append(msg)
         self._cnvs.create_window(0, 0, window=msg)
 
         self._defaultColor = msg.cget('bg')
-    
-    def _OnSizeChanged(self, event: tk.Event) -> None:
-        try:
-            if self._width != event.width or self._height != event.height:
-                self._width = event.width
-                self._height = event.height
-                self._Redraw()
-        except AttributeError:
-            self._width = event.width
-            self._height = event.height
     
     @property
     def sepWidth(self) -> int:
@@ -270,35 +252,16 @@ class LyricsView(ttk.Frame):
     def lyrics(self) -> list[str]:
         return self._lyrics
     
-    def Populate(
+    @lyrics.setter
+    def lyrics(
             self,
-            lrc: Lrc,
+            lyrics: list[str],
             highlightable: bool | None = None
             ) -> None:
-        """Populates the Lyrics View with an Lrc object. It is possible
-        to specifies the highlightability. If highlightable parameter
-        is None, the highlightability of this instance is determine
-        by AreTimstampsOk method of the Lrc object. If the Lrc object is
-        None, then this method clears the Lyrics View.
-        """
-        if lrc:
-            if highlightable is not None:
-                self._highlightable = highlightable
-            else:
-                self._highlightable = lrc.AreTimstampsOk()
-            self._lyrics = [
-                lyricsItem.text
-                for lyricsItem in lrc.lyrics]
-            self._Redraw()
-        else:
-            # No Lrc object, clearing the Lyrics View...
-            self._lyrics = []
-            self._cnvs.delete('all')
-            self._cnvs['scrollregion'] = (
-                0,
-                0,
-                self._GetWidth(),
-                self._GetHeight())
+        self._lyrics = lyrics
+        if highlightable is not None:
+            self._highlightable = highlightable
+        self._Redraw()
     
     @property
     def gap(self) -> int:
@@ -309,26 +272,18 @@ class LyricsView(ttk.Frame):
         return self._highlightable
     
     def Highlight(self, idx: int) -> None:
-        if not self.highlightable:
-            return
         if not isinstance(idx, int):
             raise TypeError("'idx' must be an integer")
         if idx != self._idx:
             if idx >= len(self._lyrics):
                 raise ValueError("Invalid value for 'idx'")
-            if idx < 0:
-                self._cnvs.yview_moveto(0)
-                if self._idx >= 0:
-                    self._msgs[self._idx]['bg'] = self._defaultColor
-                    self._idx = -1
+            if self._idx == -1 and idx < 0:
                 return
             
             if self._idx >= 0:
                 self._msgs[self._idx]['bg'] = self._defaultColor
             if idx >= 0:
                 self._msgs[idx]['bg'] = self.highlightColor
-                self._cnvs.yview_moveto(
-                        self._heights[idx] / self._extraHeight)
             self._idx = idx
 
     def _GetWidth(self) -> int:
@@ -347,7 +302,7 @@ class LyricsView(ttk.Frame):
         if self._highlightable:
             # We have to remove the scrollbar...
             if self._vscrlbr.winfo_ismapped():
-                self._vscrlbr.grid_remove()
+                self._vscrlbr.grid_forget()
         else:
             # We have to be sure the scrollbar is mapped...
             if not self._vscrlbr.winfo_ismapped():
@@ -368,7 +323,6 @@ class LyricsView(ttk.Frame):
             msg = tk.Message(
                 master=self._cnvs,
                 anchor=tk.NW,
-                justify=tk.CENTER,
                 width=cnvsWidth)
             self._msgs.append(msg)
             self._cnvs.create_window(0, 0, window=msg)
@@ -405,10 +359,6 @@ class LyricsView(ttk.Frame):
                 width=self._sepWidth)
 
             y += (self._gap + self._sepWidth)
-            try:
-                self._heights[idx] = y - cnvsMidHeight
-            except IndexError:
-                self._heights.append(y - cnvsMidHeight)
             self._msgs[idx]['width'] = cnvsWidth
             self._msgs[idx]['text'] = self._lyrics[idx]
             self._cnvs.create_window(
@@ -420,9 +370,8 @@ class LyricsView(ttk.Frame):
             y += self._msgs[idx].winfo_height()
         
         # Setting the scroll region...
-        self._extraHeight = y + cnvsMidHeight
         if self._highlightable:
-            scrollRegion = (0, 0, cnvsWidth, self._extraHeight)
+            scrollRegion = (0, 0, cnvsWidth, y + cnvsMidHeight)
         else:
             if (y - cnvsMidHeight) < cnvsHeight:
                 halfDiff = (cnvsHeight - y + cnvsMidHeight) >> 1
@@ -436,14 +385,14 @@ class LyricsView(ttk.Frame):
         self._cnvs['scrollregion'] = scrollRegion
         self._cnvs.yview_moveto(0)
     
-    '''def Clear(self) -> None:
+    def Clear(self) -> None:
         """Clears the LyricsView."""
-        self.SetLyrics([])
+        self.lyrics = []
         self._cnvs['scrollregion'] = (
             0,
             0,
             self._GetWidth(),
-            self._GetHeight())'''
+            self._GetHeight())
 
         
 class MessageView(Frame):
@@ -611,43 +560,6 @@ class MessageView(Frame):
             + (int(self._cnvs['bd']) << 1))
 
 
-class InfoView(ttk.Treeview):
-    def __init__(
-            self,
-            master: tk.Tk,
-            lrcImage: PhotoImage,
-            **kwargs) -> None:
-
-        kwargs['selectmode'] = 'browse'
-        super().__init__(master, **kwargs)
-
-        self._fileIid: str
-        self._mp3Iid: str
-        self._lrcIid: str
-
-        self._LRC_IMAGE = lrcImage
-
-        self._lrcIid = self.insert(
-            parent='',
-            index=tk.END,
-            text='LRC',
-            image=self._LRC_IMAGE,
-            open=True)
-    
-    def PopulateFile(self) -> None:
-        pass
-
-    def PopulateMp3(self) -> None:
-        pass
-    
-    def PopulateLrc(self, lrc: Lrc) -> None:
-        if lrc:
-            pass
-        else:
-            for item in self.get_children(self._lrcIid):
-                self.delete(item)
-
-
 class LyricsEditor(Sheet):
     def __init__(
             self,
@@ -657,30 +569,20 @@ class LyricsEditor(Sheet):
             ) -> None:
         super().__init__(parent, **kwargs)
 
-        self._lrc: Lrc
-
         self.headers([
             'Timestap',
             'Lyrics/text'])
         self.enable_bindings(
-            'drag_select',
-            'single_select',
             'row_drag_and_drop',
             'row_select',
+            'drag_select',
+            'single_select',
             'column_width_resize',
             'double_click_column_resize',
-            'arrowkeys',
             'edit_cell')
     
-    def Populate(self, lrc: Lrc) -> None:
-        self._lrc = lrc
-        if self._lrc:
-            #self.disable_bindings('hide_columns')
-            self.set_sheet_data(
-                self._lrc.lyrics,
-                reset_col_positions=False)
-        else:
-            self.set_sheet_data(
-                [],
-                reset_col_positions=False)
-            #self.enable_bindings('hide_columns')
+    def Clear(self) -> None:
+        self.set_sheet_data([], reset_col_positions=False)
+    
+    def Populate(self, data: list[LyricsItem]) -> None:
+        self.set_sheet_data(data, reset_col_positions=False)

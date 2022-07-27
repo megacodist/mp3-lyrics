@@ -1,4 +1,5 @@
 from concurrent.futures import Future
+from enum import IntEnum
 
 from attrs import define, field
 

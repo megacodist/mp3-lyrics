@@ -1,11 +1,9 @@
 from __future__ import annotations
+from cgitb import text
 from enum import IntFlag
 from math import modf
 from pathlib import Path
 import re
-from time import time
-
-import attrs
 
 
 class Timestamp:
@@ -40,10 +38,16 @@ class Timestamp:
 
     def __init__(
             self,
+            *,
             minutes: int = 0,
             seconds: int = 0,
             milliseconds: float = 0.0
             ) -> None:
+        """Initializes an instance of Timestamp with the specified parts.
+        If one of the parts is not of specified type, it raises TypeError.
+        If one of the parts is not in the suitable interval, it raises
+        ValueError.
+        """
         self._minutes: int
         self._seconds: int
         self._milliseconds: float
@@ -131,14 +135,26 @@ class Timestamp:
         return a != b
 
 
-class _LrcErrors(IntFlag):
-    No_ERROR = 0
-    DUPLICATE_TAGS = 1
-    UNKNOWN_TAGS = 2
-    BAD_DATA = 4
-    NO_TIMESTAMP = 8
-    BAD_LAYOUT = 16
-    OUT_OF_ORDER = 32
+class LrcErrors(IntFlag):
+    No_ERROR = 0x00
+    DUPLICATE_TAGS = 0x01
+    UNKNOWN_TAGS = 0x02
+    BAD_DATA = 0x04
+    BAD_LAYOUT = 0x08
+    NO_TIMESTAMP = 0x10
+    BAD_TIMESTAMP = 0x20
+    OUT_OF_ORDER = 0x40
+
+
+_lrcErrorMessages = {
+    LrcErrors.DUPLICATE_TAGS: 'Some tags exist more than once.',
+    LrcErrors.UNKNOWN_TAGS: 'There are some unknown tags.',
+    LrcErrors.BAD_DATA: (
+        'Some lines of the LRC file do not have a well-formed structure.'),
+    LrcErrors.BAD_LAYOUT: 'Some tags are scattered throughout the LRC file.',
+    LrcErrors.NO_TIMESTAMP: 'Some _lyrics do not have a timestamp.',
+    LrcErrors.BAD_TIMESTAMP: 'Some timestamps are not valid.',
+    LrcErrors.OUT_OF_ORDER: 'Timestamps are out of order.'}
 
 
 class LyricsItem:
@@ -162,6 +178,13 @@ class LyricsItem:
             return self.text
         else:
             raise ValueError('Index is only allowed to be 0 or 1')
+    
+    def __repr__(self) -> str:
+        return (
+            f'<{self.__class__} object '
+            + f'timestamp: {str(self.timestamp)}, '
+            + f'text: {self.text}'
+            + '>')
 
 
 class Lrc:
@@ -193,15 +216,30 @@ class Lrc:
 
     def __init__(
             self,
-            filename: str | Path | None = None
+            filename: str | Path | None = None,
+            saveUnknownTags: bool = True,
             ) -> None:
         self.filename = filename
-        self._errors = _LrcErrors.No_ERROR
+        self.saveUnknownTags = saveUnknownTags
+
+        self._errors = LrcErrors.No_ERROR
         self.tags: dict[str, str] = {}
         self._unknownTags: dict[str, str] = {}
-        self.lyrics: list[LyricsItem] = []
+        self._lyrics: list[LyricsItem] = []
 
         self._Parse()
+    
+    @property
+    def errors(self) -> LrcErrors:
+        return self._errors
+    
+    @property
+    def lyrics(self) -> list[LyricsItem]:
+        return self._lyrics
+    
+    @lyrics.setter
+    def lyrics(self, lrcs: list[LyricsItem]) -> None:
+        raise NotImplementedError()
 
     def _Parse(self) -> None:
         if self.filename is None:
@@ -214,8 +252,10 @@ class Lrc:
             (?P<inside>[^\[\]]*)
             \]
             (?P<suffix>.*)'''
+        TIME_REGEX = r'^(?P<mm>\d+):(?P<ss>\d+)(?P<xx>\.\d+)$'
         TAG_REGEX = r'^(?P<tag>\w+):(?P<value>.*)$'
         bracPattern = re.compile(BRAC_REGEX, re.VERBOSE)
+        timePattern = re.compile(TIME_REGEX)
         tagPattern = re.compile(TAG_REGEX)
 
         # Reading the content of the LRC file...
@@ -228,19 +268,27 @@ class Lrc:
             if not bracMatch:
                 data = line.strip()
                 if data:
-                    self._errors |= _LrcErrors.NO_TIMESTAMP
-                    self.lyrics.append(LyricsItem(line.strip()))
+                    self._errors |= LrcErrors.NO_TIMESTAMP
+                    self._lyrics.append(LyricsItem(line.strip()))
                     nonTagMatched = True
             else:
                 prefix = bracMatch['prefix'].strip()
                 if prefix:
-                    self._errors |= _LrcErrors.BAD_DATA
+                    self._errors |= LrcErrors.BAD_DATA
                 else:
                     inside = bracMatch['inside']
                     # Matching against timestamp (mm:ss.xx)...
-                    timestamp = Timestamp.FromString(inside)
-                    if timestamp:
-                        self.lyrics.append(LyricsItem(
+                    timeMatch = timePattern.match(inside)
+                    if timeMatch:
+                        try:
+                            timestamp = Timestamp(
+                                minutes=int(timeMatch['mm']),
+                                seconds=int(timeMatch['ss']),
+                                milliseconds=float(timeMatch['xx']))
+                        except ValueError:
+                            timestamp = None
+                            self._errors |= LrcErrors.BAD_TIMESTAMP
+                        self._lyrics.append(LyricsItem(
                             timestamp=timestamp,
                             text=bracMatch['suffix']))
                         nonTagMatched = True
@@ -250,44 +298,88 @@ class Lrc:
                         if tagMatch:
                             tag = tagMatch['tag']
                             if tag not in Lrc.TAGS:
-                                self._errors |= _LrcErrors.UNKNOWN_TAGS
+                                self._errors |= LrcErrors.UNKNOWN_TAGS
                                 self._unknownTags[tag] = tagMatch['value']
                             elif tag in self.tags:
-                                self._errors |= _LrcErrors.DUPLICATE_TAGS
+                                self._errors |= LrcErrors.DUPLICATE_TAGS
                                 self.tags[tag] = tagMatch['value']
                             else:
                                 self.tags[tag] = tagMatch['value']
                             if nonTagMatched:
-                                self._errors |= _LrcErrors.BAD_LAYOUT
+                                self._errors |= LrcErrors.BAD_LAYOUT
                         elif not inside:
-                            self._errors |= _LrcErrors.NO_TIMESTAMP
-                            self.lyrics.append(LyricsItem(
+                            self._errors |= LrcErrors.NO_TIMESTAMP
+                            self._lyrics.append(LyricsItem(
                                 text=bracMatch['suffix']))
                             nonTagMatched = True
                         else:
-                            self._errors |= _LrcErrors.BAD_DATA
+                            self._errors |= LrcErrors.BAD_DATA
         
         # Looking for out of order timestamps...
         idx = 0
-        while idx < len(self.lyrics):
-            if self.lyrics[idx].timestamp is not None:
-                prevTime = self.lyrics[idx].timestamp
+        while idx < len(self._lyrics):
+            if self._lyrics[idx].timestamp is not None:
+                prevTime = self._lyrics[idx].timestamp
                 idx += 1
                 break
             idx += 1
-        while idx < len(self.lyrics):
-            if self.lyrics[idx].timestamp <= prevTime:
-                self._errors |= _LrcErrors.OUT_OF_ORDER
+        while idx < len(self._lyrics):
+            if self._lyrics[idx].timestamp <= prevTime:
+                self._errors |= LrcErrors.OUT_OF_ORDER
                 break
             else:
-                prevTime = self.lyrics[idx].timestamp
+                prevTime = self._lyrics[idx].timestamp
             idx += 1
+    
+    def AreTimstampsOk(self) -> bool:
+        """Specifies whether timestamps are Ok."""
+        return not(
+            self._errors & LrcErrors.NO_TIMESTAMP
+            | self._errors & LrcErrors.BAD_TIMESTAMP
+            | self._errors & LrcErrors.OUT_OF_ORDER)
+    
+    def GetErrors(self) -> list[str]:
+        """Returns a list of errors encountered parsing the LRC file. If
+        no error was found, it returns an empty list.
+        """
+        errors: list[str] = []
+        ERRORS: list[LrcErrors] = list(LrcErrors)[1:]
+        for flag in ERRORS:
+            if self._errors & flag == flag:
+                errors.append(_lrcErrorMessages[flag])
 
     def Save(self) -> None:
-        raise NotImplementedError()
+        with open(self.filename, mode='wt') as lrcFile:
+            # Writing tags...
+            for tag, text in self.tags:
+                lrcFile.write(f'[{tag}:{text}]\n')
+            # Writing unknown tags...
+            if self.saveUnknownTags:
+                for tag, text in self._unknownTags:
+                    lrcFile.write(f'[{tag}:{text}]\n')
+            # Writing _lyrics...
+            for _lyricsItem in self._lyrics:
+                lrcFile.write(
+                    f'[{str(_lyricsItem.timestamp)}] {_lyricsItem.text}\n')
     
-    def errors(self) -> list[str]:
-        raise NotImplementedError()
+    def __getitem__(self, __value: str | Timestamp, /) -> str:
+        """Subscript can be used to tag values or lyrics at a specified
+        timestamp. If the argument is string, it returns the tag's value,
+        otherwise KeyError will be raised. If the argument if a Timestamp
+        object, it returns the lyrics at that timestamp or raises
+        KeyError.
+        """
+        if isinstance(__value, str):
+            allTags = {**self.tags, **self._unknownTags}
+            return allTags[__value]
+        elif isinstance(__value, Timestamp):
+            allLyrics = {
+                lrcItem.timestamp:lrcItem.text
+                for lrcItem in self._lyrics}
+            return allLyrics[__value]
+        else:
+            raise TypeError(
+                f"Expected 'str' or 'Timestamp' got '{type(__value)}'")
     
     def __repr__(self) -> str:
         return (
@@ -296,4 +388,4 @@ class Lrc:
             + f'\nErrors: {self._errors.name}'
             + f'\nTags: {self.tags}'
             + f'\nUnknown tags: {self._unknownTags}'
-            + f'\nLyrics: {self.lyrics}')
+            + f'\nLyrics: {self._lyrics}')
