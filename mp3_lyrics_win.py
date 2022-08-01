@@ -74,7 +74,6 @@ class Mp3LyricsWin(tk.Tk):
             master=self,
             value=settings['MLW_AFTER_PLAYED'])
         self._lrc: Lrc | None = None
-        self._lrcChanged: bool = False
         self._timestamps: SortedList[float] = []
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
@@ -290,14 +289,6 @@ class Mp3LyricsWin(tk.Tk):
             text='Events')
         
         #
-        self._infovw = InfoView(
-            master=self._ntbk_infoEvents,
-            lrcImage=self._IMG_LRC)
-        self._ntbk_infoEvents.add(
-            self._infovw,
-            text='Info')
-        
-        #
         self._frm_controls = ttk.Frame(
             master=self._frm_main)
         self._frm_controls.grid(
@@ -429,20 +420,27 @@ class Mp3LyricsWin(tk.Tk):
             row=0,
             sticky=tk.NSEW)
         
-        #
+        '''#
         self._frm_editor = ttk.Frame(
             master=self._notebook)
         self._notebook.add(
             self._frm_editor,
-            text='Editor')
+            text='Editor')'''
         
         #
         self._lrcedt = LyricsEditor(
-            self._frm_editor,
-            changed=self._lrcChanged)
-        self._lrcedt.pack(
-            fill=tk.BOTH,
-            expand=1)
+            self)
+        self._notebook.add(
+            self._lrcedt,
+            text='Editor')
+        
+        #
+        self._infovw = InfoView(
+            self,
+            lrcImage=self._IMG_LRC)
+        self._notebook.add(
+            self._infovw,
+            text='Info')
     
     def _OnKeyPressed(self, event: tk.Event) -> None:
         altCtrlShift = (
@@ -597,7 +595,6 @@ class Mp3LyricsWin(tk.Tk):
             try:
                 self._lrc = self._loadingLrc.future.result()
                 pprint(self._lrc)
-                self._lrcChanged = False
             except FileNotFoundError: 
                 self._msgvw.AddMessage(
                     title='No LRC',
@@ -766,7 +763,7 @@ class Mp3LyricsWin(tk.Tk):
         # Uninitializing the 'pygame.mixer' module...
         quit()
 
-        if self._lrcChanged:
+        if self._lrc.changed:
             self._SaveLrc()
 
         # Saving settings...
@@ -810,7 +807,7 @@ class Mp3LyricsWin(tk.Tk):
         self._OnClosingWin()'''
 
     def _SaveLrc(self) -> None:
-        pass
+        self._lrc.Save()
     
     def _GetClipboardAsList(self) -> list[str]:
         lyrics = self.clipboard_get()
@@ -847,11 +844,18 @@ class Mp3LyricsWin(tk.Tk):
         self._lrcvw.Populate(self._lrc)
 
         # Populating the lyrics editor...
-        if not self._lrcedt.winfo_ismapped():
-            self._lrcedt.pack(
-                fill=tk.BOTH,
-                expand=True)
         self._lrcedt.Populate(self._lrc)
 
         # Populating the InofView...
         self._infovw.PopulateLrc(self._lrc)
+
+        # Adding a message if necessary...
+        if self._lrc and self._lrc.errors:
+            message = [
+                str(idx) + '. ' + error
+                for idx, error in enumerate(self._lrc.GetErrors(), 1)]
+            message.insert(0, self._lrc.filename + '\n')
+            self._msgvw.AddMessage(
+                title='LRC error',
+                message='\n'.join(message),
+                type=MessageType.WARNING)

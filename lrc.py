@@ -1,9 +1,14 @@
+"""This module exposes API to parse and work with LRC files which are
+accompany resource for some MP3 files.
+"""
+
 from __future__ import annotations
-from cgitb import text
+from copy import deepcopy
 from enum import IntFlag
 from math import modf
 from pathlib import Path
 import re
+from typing import overload
 
 
 class Timestamp:
@@ -143,17 +148,19 @@ class LrcErrors(IntFlag):
     BAD_LAYOUT = 0x08
     NO_TIMESTAMP = 0x10
     BAD_TIMESTAMP = 0x20
-    OUT_OF_ORDER = 0x40
+    DUPLICATE_TIMESTAMPS= 0x40
+    OUT_OF_ORDER = 0x80
 
 
 _lrcErrorMessages = {
     LrcErrors.DUPLICATE_TAGS: 'Some tags exist more than once.',
     LrcErrors.UNKNOWN_TAGS: 'There are some unknown tags.',
-    LrcErrors.BAD_DATA: (
-        'Some lines of the LRC file do not have a well-formed structure.'),
+    LrcErrors.BAD_DATA:
+        'Some lines of the LRC file do not have a well-formed structure.',
     LrcErrors.BAD_LAYOUT: 'Some tags are scattered throughout the LRC file.',
-    LrcErrors.NO_TIMESTAMP: 'Some _lyrics do not have a timestamp.',
+    LrcErrors.NO_TIMESTAMP: 'Some lyrics do not have a timestamp.',
     LrcErrors.BAD_TIMESTAMP: 'Some timestamps are not valid.',
+    LrcErrors.DUPLICATE_TIMESTAMPS: 'Some lyrics have the same timestamps.',
     LrcErrors.OUT_OF_ORDER: 'Timestamps are out of order.'}
 
 
@@ -181,7 +188,7 @@ class LyricsItem:
     
     def __repr__(self) -> str:
         return (
-            f'<{self.__class__} object '
+            f'<{self.__class__.__module__}.{self.__class__.__name__} object '
             + f'timestamp: {str(self.timestamp)}, '
             + f'text: {self.text}'
             + '>')
@@ -189,7 +196,13 @@ class LyricsItem:
 
 class Lrc:
     """Parses and manipulates LRC files. To load an LRC file, you must pass
-    its file system address to the constructor.
+    its file system address to the constructor. To get the LRC file
+    associated with a file, pass that file name to the GetLrcFilename class
+    method. Instances of this class are not thread safe.
+
+    Use subscript to manipulate tags (read, set, or delete a specified tag)
+    but to do operations with LyricsItems, get a snapshot from lyrics
+    property, apply changes you want and set it to lyrics property.
     """
     TAGS: list[str] = [
         'ar',
@@ -216,33 +229,99 @@ class Lrc:
 
     def __init__(
             self,
-            filename: str | Path | None = None,
-            saveUnknownTags: bool = True,
+            filename: str | Path,
+            saveUnknownTags: bool = False,
             ) -> None:
-        self.filename = filename
-        self.saveUnknownTags = saveUnknownTags
+        """Loads the specified 'filename' as LRC file and returns an Lrc
+        object. 
+        """
+        self._nDuplicates: int = 0
 
+        # Initializing properties...
+        self._filename: str | Path = filename
         self._errors = LrcErrors.No_ERROR
-        self.tags: dict[str, str] = {}
-        self._unknownTags: dict[str, str] = {}
+        self._tags: dict[str, str | list[str]] = {}
+        self._unknownTags: dict[str, str | list[str]] = {}
         self._lyrics: list[LyricsItem] = []
+        self._changed: bool = False
+
+        # Initializing attributes...
+        self.saveUnknownTags: bool = saveUnknownTags
 
         self._Parse()
+    
+    @property
+    def filename(self) -> str | Path:
+        """Gets the filename (file system address) of this Lrc object."""
+        return self._filename
+    
+    @property
+    def tags(self) -> dict[str, str | list[str]]:
+        """Gets a dictinary containing all tags of this object. Every tag
+        correspond to a string (tag value) or a list of string (in the case
+        of LrcErrors.DUPLICATE_TAGS error). This is a copy of the underlying
+        attribute.
+        """
+        return deepcopy(self._tags)
+    
+    @property
+    def unknownTags(self) -> dict[str, str | list[str]]:
+        """Gets a dictinary containing all unknown tags of this object.
+        Every tag correspond to a string (tag value) or a list of string
+        (in the case of LrcErrors.DUPLICATE_TAGS error).  This is a copy of
+        the underlying attribute.
+        """
+        return deepcopy(self._unknownTags)
     
     @property
     def errors(self) -> LrcErrors:
         return self._errors
     
     @property
+    def changed(self) -> bool:
+        """Gets a boolean value specifying whether this object has been
+        modified after instantiation or last Save method.
+        """
+        return self._changed
+    
+    @property
     def lyrics(self) -> list[LyricsItem]:
-        return self._lyrics
+        """Gets or sets lyrics items of this Lrc object. It returns a copy
+        of the list of LyricsItems of this Lrc object. To change LyricsItems
+        of this object, first get a copy by this property, apply changes you
+        want and set it to this property.
+        
+        Exceptions:
+        ⬤ TypeError: The r-value is not a list of LyricsItems.
+        ⬤ ValueError: Some timestamps in r-value are either unspecified or
+        duplicate or out of order.
+        """
+        return deepcopy(self._lyrics)
     
     @lyrics.setter
     def lyrics(self, lrcs: list[LyricsItem]) -> None:
-        raise NotImplementedError()
+        # Backing up the errors...
+        backup: LrcErrors = self._errors
+        # Checking lrcs data accuracy...
+        try:
+            for lrcItem in lrcs:
+                if not isinstance(lrcItem.text, str):
+                    raise Exception()
+            self._CheckTimestamps(lrcs)
+        except Exception:
+            self._errors = backup
+            raise TypeError(
+                "'lrcs' is expected to be a list of 'LyricsItems'")
+        if not self.AreTimstampsOk():
+            self._errors = backup
+            raise ValueError(
+                "Timestamps must be specified, unique, and in order")
+        # Setting lyrics...
+        self._lyrics = lrcs
 
     def _Parse(self) -> None:
-        if self.filename is None:
+        """Parses the file and initializes the attributes."""
+        if self._filename is None:
             # No file system address is provided, Doing nothing...
             return
 
@@ -259,7 +338,7 @@ class Lrc:
         tagPattern = re.compile(TAG_REGEX)
 
         # Reading the content of the LRC file...
-        with open(self.filename, mode='rt') as lrcFile:
+        with open(self._filename, mode='rt') as lrcFile:
             lines = lrcFile.readlines()
         
         nonTagMatched = False
@@ -299,12 +378,28 @@ class Lrc:
                             tag = tagMatch['tag']
                             if tag not in Lrc.TAGS:
                                 self._errors |= LrcErrors.UNKNOWN_TAGS
-                                self._unknownTags[tag] = tagMatch['value']
-                            elif tag in self.tags:
+                                if tag in self._unknownTags:
+                                    try:
+                                        self._unknownTags[tag].append(
+                                            tagMatch['value'])
+                                    except AttributeError:
+                                        self._unknownTags[tag] = [
+                                            self._unknownTags[tag],
+                                            tagMatch['value']]
+                                        self._nDuplicates += 1
+                                    self._errors |= LrcErrors.DUPLICATE_TAGS
+                                else:
+                                    self._unknownTags[tag] = tagMatch['value']
+                            elif tag in self._tags:
                                 self._errors |= LrcErrors.DUPLICATE_TAGS
-                                self.tags[tag] = tagMatch['value']
+                                try:
+                                    self._tags.append(tagMatch['value'])
+                                except AttributeError:
+                                    self._tags[tag] = [
+                                            self._tags[tag],
+                                            tagMatch['value']]
                             else:
-                                self.tags[tag] = tagMatch['value']
+                                self._tags[tag] = tagMatch['value']
                             if nonTagMatched:
                                 self._errors |= LrcErrors.BAD_LAYOUT
                         elif not inside:
@@ -315,8 +410,10 @@ class Lrc:
                         else:
                             self._errors |= LrcErrors.BAD_DATA
         
-        # Looking for out of order timestamps...
-        idx = 0
+        # Looking for timestamps errors...
+        self._CheckTimestamps(self._lyrics)
+
+        '''idx = 0
         while idx < len(self._lyrics):
             if self._lyrics[idx].timestamp is not None:
                 prevTime = self._lyrics[idx].timestamp
@@ -329,13 +426,51 @@ class Lrc:
                 break
             else:
                 prevTime = self._lyrics[idx].timestamp
-            idx += 1
+            idx += 1'''
+    
+    def _CheckTimestamps(self, lrcs: list[LyricsItem]) -> None:
+        """Checks a list of LyricsItems for NO_TIMESTAMP, OUT_OF_ORDER,
+        and DUPLICATE_TIMESTAMPS errors.
+        """
+        lrcs_ = [
+            lrcItem.timestamp
+            for lrcItem in lrcs
+            if lrcItem.timestamp is not None]
+        # Looking for NO_TIMESTAMP...
+        if len(lrcs_) < len(lrcs):
+            self._errors |= LrcErrors.NO_TIMESTAMP
+        else:
+            self._errors &= (~LrcErrors.NO_TIMESTAMP)
+        # Looking for OUT_OF_ORDER...
+        idx = 0
+        while True:
+            try:
+                if lrcs_[idx] > lrcs_[idx + 1]:
+                    self._errors |= LrcErrors.OUT_OF_ORDER
+                    break
+                idx += 1
+            except IndexError:
+                self._errors &= (~LrcErrors.OUT_OF_ORDER)
+                break
+        # Looking for DUPLICATE_TIMESTAMPS...
+        lrcs_.sort(key=lambda a: a.timestamp)
+        idx = 0
+        while True:
+            try:
+                if lrcs_[idx] == lrcs_[idx + 1]:
+                    self._errors |= LrcErrors.DUPLICATE_TIMESTAMPS
+                    break
+                idx += 1
+            except IndexError:
+                self._errors &= (~LrcErrors.DUPLICATE_TIMESTAMPS)
+                break
     
     def AreTimstampsOk(self) -> bool:
         """Specifies whether timestamps are Ok."""
         return not(
             self._errors & LrcErrors.NO_TIMESTAMP
             | self._errors & LrcErrors.BAD_TIMESTAMP
+            | self._errors & LrcErrors.DUPLICATE_TIMESTAMPS
             | self._errors & LrcErrors.OUT_OF_ORDER)
     
     def GetErrors(self) -> list[str]:
@@ -347,45 +482,165 @@ class Lrc:
         for flag in ERRORS:
             if self._errors & flag == flag:
                 errors.append(_lrcErrorMessages[flag])
+        return errors
 
     def Save(self) -> None:
-        with open(self.filename, mode='wt') as lrcFile:
-            # Writing tags...
-            for tag, text in self.tags:
-                lrcFile.write(f'[{tag}:{text}]\n')
-            # Writing unknown tags...
-            if self.saveUnknownTags:
-                for tag, text in self._unknownTags:
-                    lrcFile.write(f'[{tag}:{text}]\n')
-            # Writing _lyrics...
+        """Saves this object to the filename and sets changed property to
+        False. It also resolves BAD_DATA, BAD_LAYOUT, and DUPLICATE_TAGS if
+        there are, and hence removes their flags. Before calling this API,
+        it is possible to change saveUnknownTags attribute.
+        """
+        with open(self._filename, mode='wt') as lrcFile:
+            # Writing tags to the file...
+            for tag, value in self._tags:
+                if isinstance(value, str):
+                    lrcFile.write(f'[{tag}:{value}]\n')
+                else:
+                    lrcFile.write(f'[{tag}:{value[-1]}]\n')
+
+            # Writing unknown tags to the file...
+            if self.saveUnknownTags and self._unknownTags:
+                for tag, value in self._unknownTags:
+                    if isinstance(value, str):
+                        lrcFile.write(f'[{tag}:{value}]\n')
+                    else:
+                        lrcFile.write(f'[{tag}:{value[-1]}]\n')
+                self._errors |= LrcErrors.UNKNOWN_TAGS
+            else:
+                # Removing UNKNOWN_TAGS flag...
+                self._errors &= (~LrcErrors.UNKNOWN_TAGS)
+
+            # Writing lyrics to the file...
             for _lyricsItem in self._lyrics:
                 lrcFile.write(
                     f'[{str(_lyricsItem.timestamp)}] {_lyricsItem.text}\n')
+
+        # Removing some flags...
+        self._changed = False
+        self._errors &= (~LrcErrors.BAD_DATA)
+        self._errors &= (~LrcErrors.BAD_LAYOUT)
+        self._errors &= (~LrcErrors.DUPLICATE_TAGS)
     
-    def __getitem__(self, __value: str | Timestamp, /) -> str:
-        """Subscript can be used to tag values or lyrics at a specified
-        timestamp. If the argument is string, it returns the tag's value,
-        otherwise KeyError will be raised. If the argument if a Timestamp
-        object, it returns the lyrics at that timestamp or raises
-        KeyError.
+    @overload
+    def __getitem__(self, __tag: str, /) -> str | list[str]:
+        ...
+    
+    @overload
+    def __getitem__(self, __idx: int, /) -> LyricsItem:
+        ...
+
+    def __getitem__(
+            self,
+            __value: str | int,
+            /
+            ) -> str | list[str] | LyricsItem:
+        """Subscript can be used to get tag values or LyricsItems.
+        If the argument is a string, it returns the tag's value, if the
+        argument is an integer, it returns the LyricsItem in lyrics property
+        at that index.
+
+        Exceptions:
+        ⬤ KeyError: if '__value' is a string and does not exist in either
+        tags or unknown tags dictionaries.
+        ⬤ IndexError: if '__value' is an integer and does not exist in the
+        lyrics property.
+        ⬤ TypeError: if '__value' is not either string or integer objects.
         """
         if isinstance(__value, str):
-            allTags = {**self.tags, **self._unknownTags}
+            try:
+                return self._tags[__value]
+            except KeyError:
+                try:
+                    return self._unknownTags[__value]
+                except KeyError:
+                    raise KeyError(
+                        f"'{__value}' does not exist"
+                        + " in tags nor unknown tags.")
+            allTags = {**self._tags, **self._unknownTags}
             return allTags[__value]
-        elif isinstance(__value, Timestamp):
-            allLyrics = {
-                lrcItem.timestamp:lrcItem.text
-                for lrcItem in self._lyrics}
-            return allLyrics[__value]
+        elif isinstance(__value, int):
+            return self._lyrics[__value]
         else:
             raise TypeError(
-                f"Expected 'str' or 'Timestamp' got '{type(__value)}'")
+                f"Expected 'str' or 'int' got '{type(__value).__name__}'")
+    
+    def __setitem__(self, __tag: str, __text: str, /) -> None:
+        """Assigning to subscript is required to perform with tags and
+        unknown tags not lyrics.
+        """
+        if not isinstance(__tag, str):
+            raise TypeError("The subscript must ba a string")
+        if not isinstance(__text, str):
+            raise TypeError(
+                "Only strings are allowed to be assigned to subscript")
+        if __tag in Lrc.TAGS:
+            try:
+                if __text != self._tags[__tag]:
+                    self._changed = True
+            except Exception:
+                self._changed = True
+            self._tags[__tag] = __text
+        else:
+            try:
+                if __text != self._unknownTags[__tag]:
+                    self._changed = True
+            except Exception:
+                self._changed = True
+            self._unknownTags[__tag] = __text
+            self._errors |= LrcErrors.UNKNOWN_TAGS
+    
+    def __delitem__(self, __value: str | int) -> None:
+        """Deletes the specified tag or index at lyrics property."""
+        if isinstance(__value, str):
+            try:
+                del self._tags[__value]
+                self._changed = True
+            except KeyError:
+                try:
+                    del self._unknownTags[__value]
+                    self._changed = True
+                    if not self._unknownTags:
+                        self._errors &= (~LrcErrors.UNKNOWN_TAGS)
+                except KeyError:
+                    raise KeyError(
+                        f"'{__value}' does not exist"
+                        + " in tags nor unknown tags.")
+        elif isinstance(__value, int):
+            del self._lyrics[__value]
+            self._changed = True
+        else:
+            raise TypeError(
+                f"Expected 'str' or 'int' got '{type(__value).__name__}'")
+    
+    def RemoveDupElem(self, tag: str, idx: int) -> None:
+        """
+        Exceptions:
+        ⬤ TypeError: Invalid object types for arguments.
+        ⬤ ValueError: tag is not duplicate
+        ⬤ IndexError: if '__value' is not either string or integer objects.
+        """
+        if not isinstance(tag, str):
+            raise TypeError("'tag' must be a string")
+        if not isinstance(idx, int):
+            raise TypeError("'idx' must be an integer")
+        allTags = {**self._tags, **self._unknownTags}
+        if tag in allTags:
+            if isinstance(allTags, str):
+                raise ValueError("'tag' is not duplicate")
+            del allTags[tag][idx]
+            if len(allTags[tag]) == 1:
+                allTags[tag] = allTags[tag][0]
+                self._nDuplicates -= 1
+                if self._nDuplicates == 0:
+                    self._errors &= (~LrcErrors.DUPLICATE_TAGS)
+        else:
+            raise ValueError("'tag' is not available")
     
     def __repr__(self) -> str:
         return (
             f'{super().__repr__()}'
-            + f'\nFile name: {self.filename}'
+            + f'\nFile name: {self._filename}'
             + f'\nErrors: {self._errors.name}'
-            + f'\nTags: {self.tags}'
+            + f'\nTags: {self._tags}'
             + f'\nUnknown tags: {self._unknownTags}'
             + f'\nLyrics: {self._lyrics}')

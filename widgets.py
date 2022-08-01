@@ -449,7 +449,7 @@ class LyricsView(ttk.Frame):
 class MessageView(Frame):
     _colors = {
         MessageType.INFO: 'LightBlue1',
-        MessageType.WARNING: 'gold',
+        MessageType.WARNING: '#e9e48f',
         MessageType.ERROR: '#e47e8f'}
 
     def __init__(
@@ -652,7 +652,6 @@ class LyricsEditor(Sheet):
     def __init__(
             self,
             parent: tk.Misc,
-            changed: bool,
             **kwargs
             ) -> None:
         super().__init__(parent, **kwargs)
