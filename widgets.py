@@ -8,8 +8,9 @@ from typing import Callable
 from PIL.ImageTk import PhotoImage
 from tkhtmlview import HTMLLabel
 from tksheet import Sheet
+from tksheet._tksheet_other_classes import EditCellEvent
 
-from lrc import Lrc, LyricsItem
+from lrc import Lrc, LyricsItem, Timestamp
 
 
 class MessageType(IntEnum):
@@ -159,10 +160,14 @@ class WaitFrame(ttk.Frame):
         self.after_cancel(self._afterID)
         self._cancelCallback = None
         self.place_forget()
+        self.destroy()
     
-    def _Cancel(self) -> None:
+    def ShowCanceling(self) -> None:
         self._btn_cancel['text'] = 'Canceling...'
         self._btn_cancel['state'] = tk.DISABLED
+    
+    def _Cancel(self) -> None:
+        self.ShowCanceling()
         self._cancelCallback()
     
     def _AnimateGif(self, idx: int) -> None:
@@ -282,10 +287,12 @@ class LyricsView(ttk.Frame):
         None, then this method clears the Lyrics View.
         """
         if lrc:
+            # Setting highlightable...
             if highlightable is not None:
                 self._highlightable = highlightable
             else:
                 self._highlightable = lrc.AreTimstampsOk()
+            # Setting lyrics...
             self._lyrics = [
                 lyricsItem.text
                 for lyricsItem in lrc.lyrics]
@@ -353,7 +360,7 @@ class LyricsView(ttk.Frame):
             if not self._vscrlbr.winfo_ismapped():
                 self._vscrlbr.grid(
                     column=1,
-                    row=1,
+                    row=0,
                     sticky=tk.NSEW)
 
         cnvsWidth = self._GetWidth()
@@ -374,7 +381,7 @@ class LyricsView(ttk.Frame):
             self._cnvs.create_window(0, 0, window=msg)
             idx += 1
         if nMsgs < nLyrics:
-            self._cnvs.update_idletasks()
+            self._cnvs.update()
         self._cnvs.delete('all')
 
         if nLyrics <= 0:
@@ -390,7 +397,7 @@ class LyricsView(ttk.Frame):
             y,
             anchor=tk.N,
             window=self._msgs[0])
-        self._cnvs.update_idletasks()
+        self._cnvs.update()
         y += self._msgs[0].winfo_height()
         
         # Drawing the rest of Messages (lyrics)...
@@ -416,7 +423,7 @@ class LyricsView(ttk.Frame):
                 y,
                 anchor=tk.N,
                 window=self._msgs[idx])
-            self._cnvs.update_idletasks()
+            self._cnvs.update()
             y += self._msgs[idx].winfo_height()
         
         # Setting the scroll region...
@@ -435,15 +442,6 @@ class LyricsView(ttk.Frame):
                 scrollRegion = (0, cnvsMidHeight, cnvsWidth, y)
         self._cnvs['scrollregion'] = scrollRegion
         self._cnvs.yview_moveto(0)
-    
-    '''def Clear(self) -> None:
-        """Clears the LyricsView."""
-        self.SetLyrics([])
-        self._cnvs['scrollregion'] = (
-            0,
-            0,
-            self._GetWidth(),
-            self._GetHeight())'''
 
         
 class MessageView(Frame):
@@ -563,7 +561,7 @@ class MessageView(Frame):
             self._msgs.pop()
         
         self._cnvs.create_window(0, 0, window=msg)
-        self.update_idletasks()
+        self.update()
         self._Redraw()
     
     def _Redraw(self) -> None:
@@ -611,28 +609,123 @@ class MessageView(Frame):
             + (int(self._cnvs['bd']) << 1))
 
 
-class InfoView(ttk.Treeview):
+class InfoView(ttk.Frame):
     def __init__(
             self,
             master: tk.Tk,
-            lrcImage: PhotoImage,
+            gap: int = 5,
             **kwargs) -> None:
 
-        kwargs['selectmode'] = 'browse'
         super().__init__(master, **kwargs)
 
-        self._fileIid: str
-        self._mp3Iid: str
-        self._lrcIid: str
+        self._gap: int = gap
+        self._lrc: Lrc | None = None
 
-        self._LRC_IMAGE = lrcImage
+        self._InitGui()
+    
+    def _InitGui(self) -> None:
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
 
-        self._lrcIid = self.insert(
-            parent='',
-            index=tk.END,
-            text='LRC',
-            image=self._LRC_IMAGE,
-            open=True)
+        #
+        self._vscrlbr = ttk.Scrollbar(
+            self,
+            orient=tk.VERTICAL)
+        self._cnvs = tk.Canvas(
+            self,
+            yscrollcommand=self._vscrlbr.set)
+        self._vscrlbr['command'] = self._cnvs.yview
+        self._cnvs.grid(
+            column=0,
+            row=0,
+            padx=5,
+            pady=5,
+            sticky=tk.NSEW)
+        self._vscrlbr.grid(
+            column=1,
+            row=0,
+            sticky=tk.NSEW)
+        
+        #
+        self._msg_lrc = tk.Message(
+            self._cnvs,
+            text='LRC informations:',
+            justify=tk.LEFT)
+        
+        #
+        self._frm_lrc = ttk.Frame(self._cnvs)
+        self._frm_lrc.columnconfigure(0, weight=1)
+        self._frm_lrc.rowconfigure(0, weight=1)
+
+        #
+        self._vscrlbr_lrc = ttk.Scrollbar(
+            self._frm_lrc,
+            orient=tk.VERTICAL)
+        self._hscrlbr_lrc = ttk.Scrollbar(
+            self._frm_lrc,
+            orient=tk.HORIZONTAL)
+        self._txt_lrc = tk.Text(
+            self._frm_lrc,
+            wrap='word',
+            xscrollcommand=self._hscrlbr_lrc.set,
+            yscrollcommand=self._vscrlbr_lrc.set)
+        self._vscrlbr_lrc['command'] = self._txt_lrc.yview
+        self._hscrlbr_lrc['command'] = self._txt_lrc.xview
+        self._txt_lrc.grid(
+            column=0,
+            row=0,
+            sticky=tk.NSEW)
+        self._vscrlbr_lrc.grid(
+            column=1,
+            row=0,
+            sticky=tk.NSEW)
+        self._hscrlbr_lrc.grid(
+            column=0,
+            row=1,
+            sticky=tk.NSEW)
+        
+        self._Redraw()
+    
+    def _GetWidth(self) -> int:
+        return (
+            self._cnvs.winfo_width()
+            - 4
+            + (int(self._cnvs['bd']) << 1))
+    
+    def _GetHeight(self) -> int:
+        return (
+            self._cnvs.winfo_height()
+            - 4
+            + (int(self._cnvs['bd']) << 1))
+    
+    def _Redraw(self) -> None:
+        cnvsWidth = self._GetWidth()
+        cnvsHeight = self._GetHeight()
+
+        self._cnvs.delete('all')
+        y = self._gap
+
+        # Drawing _msg_lrc...
+        self._msg_lrc['width'] = cnvsWidth
+        self._cnvs.create_window(
+            0,
+            y,
+            anchor=tk.NW,
+            window=self._msg_lrc)
+        self.update()
+        y += (self._msg_lrc.winfo_height() + self._gap)
+
+        # Drawing _frm_lrc...
+        self._frm_lrc['width'] = cnvsWidth
+        self._cnvs.create_window(
+            0,
+            y,
+            anchor=tk.NW,
+            window=self._frm_lrc)
+        self.update()
+        y += (self._frm_lrc.winfo_height() + self._gap)
+
+        self._cnvs['scrollregion'] = (0, 0, cnvsWidth, y)
     
     def PopulateFile(self) -> None:
         pass
@@ -641,11 +734,11 @@ class InfoView(ttk.Treeview):
         pass
     
     def PopulateLrc(self, lrc: Lrc) -> None:
+        self._lrc = lrc
+        self._txt_lrc.delete('1.0', 'end')
         if lrc:
-            pass
-        else:
-            for item in self.get_children(self._lrcIid):
-                self.delete(item)
+            self._txt_lrc.insert('1.0', repr(self._lrc))   
+        self._Redraw()         
 
 
 class LyricsEditor(Sheet):
@@ -656,6 +749,7 @@ class LyricsEditor(Sheet):
             ) -> None:
         super().__init__(parent, **kwargs)
 
+        self._changed: bool = False
         self._lrc: Lrc
 
         self.headers([
@@ -670,6 +764,19 @@ class LyricsEditor(Sheet):
             'double_click_column_resize',
             'arrowkeys',
             'edit_cell')
+        
+        # Binding...
+        self.extra_bindings(
+            'end_edit_cell',
+            self._OnCellEdited)
+    
+    def _OnCellEdited(self, event: EditCellEvent) -> None:
+        self._changed = True
+    
+    def ApplyLyrics(self) -> None:
+        if self._changed:
+            data = self.get_sheet_data()
+            self._lrc.lyrics = data
     
     def Populate(self, lrc: Lrc) -> None:
         self._lrc = lrc
@@ -683,3 +790,67 @@ class LyricsEditor(Sheet):
                 [],
                 reset_col_positions=False)
             #self.enable_bindings('hide_columns')
+    
+    def InsertRowAbove(self, *args, **kwargs) -> None:
+        if self._lrc:
+            # Checking whether sheet is empty...
+            data = self.get_sheet_data()
+            if not len(data):
+                data.append(LyricsItem(''))
+                self.set_sheet_data(data, reset_col_positions=False)
+                return
+
+            # Getting the selection box...
+            rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
+            if (rowEnd - rowStart) == 1:
+                data = self.get_sheet_data()
+                data.insert(
+                    rowStart,
+                    LyricsItem(''))
+                self.set_sheet_data(data, reset_col_positions=False)
+                self.select_cell(rowStart - 1, 1)
+
+    def InsertRowBelow(self) -> None:
+        if self._lrc:
+            # Checking whether sheet is empty...
+            data = self.get_sheet_data()
+            if not len(data):
+                data.append(LyricsItem(''))
+                self.set_sheet_data(data, reset_col_positions=False)
+                return
+
+            # Getting the selection box...
+            rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
+            if (rowEnd - rowStart) == 1:
+                data = self.get_sheet_data()
+                data.insert(
+                    rowEnd,
+                    LyricsItem(''))
+                self.set_sheet_data(data, reset_col_positions=False)
+                self.select_cell(rowEnd, 1)
+    
+    def ClearCells(self) -> None:
+        rowStart, colStart, rowEnd, colEnd = self.get_all_selection_boxes()[0]
+        data = self.get_sheet_data()
+        for rowIdx in range(rowStart, rowEnd):
+            for colIdx in range(colStart, colEnd):
+                data[rowIdx][colIdx] = ''
+        self.set_sheet_data(data, reset_col_positions=False)
+    
+    def RemoveRows(self) -> None:
+        rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
+        data = self.get_sheet_data()
+        data = [*data[0:rowStart], *data[rowEnd:]]
+        self.set_sheet_data(data, reset_col_positions=False)
+        self.deselect()
+    
+    def SetTimestamp(self, pos: float) -> None:
+        if self._lrc:
+            # Getting the selection box...
+            rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
+            if (rowEnd - rowStart) == 1:
+                data = self.get_sheet_data()
+                data[rowStart][0] = Timestamp.FromFloat(pos)
+                self.set_sheet_data(data, reset_col_positions=False)
+                if rowEnd < len(data):
+                    self.select_cell(rowEnd, 0)

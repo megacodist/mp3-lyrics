@@ -39,7 +39,7 @@ class Timestamp:
         """
         xx, secs = modf(seconds)
         mm, ss = divmod(int(secs), 60)
-        return Timestamp(minutes=mm, seconds=ss, milliseconds=xx)
+        return Timestamp(minutes=mm, seconds=ss, milliseconds=round(xx, 3))
 
     def __init__(
             self,
@@ -185,6 +185,30 @@ class LyricsItem:
             return self.text
         else:
             raise ValueError('Index is only allowed to be 0 or 1')
+
+    def __setitem__(self, __idx: int, __value: str | Timestamp, /) -> None:
+        if __idx == 0:
+            if isinstance(__value, str):
+                if __value == '':
+                    self.timestamp = None
+                else:
+                    self.timestamp = Timestamp.FromString(__value)
+            elif isinstance(__value, Timestamp):
+                self.timestamp = __value
+            else:
+                raise TypeError(
+                    "Item for index 0 of a 'LyricsItem' must be Timestamp")
+        elif __idx == 1:
+            if not isinstance(__value, str):
+                raise TypeError(
+                    "Item for index 0 of a 'LyricsItem' must be string")
+            self.text = __value
+        else:
+            raise TypeError(
+                "Item assignment for 'LyricsItem' only supports 0 or 1")
+    
+    def __len__(self) -> int:
+        return 2
     
     def __repr__(self) -> str:
         return (
@@ -226,11 +250,19 @@ class Lrc:
             return filename[:-extLength] + '.lrc'
         else:
             return filename + '.lrc'
+    
+    @classmethod
+    def CreateLrc(cls, filename: str | Path) -> Lrc:
+        lrcFilename = Lrc.GetLrcFilename(filename)
+        with open(lrcFilename, mode='x') as lrcFileObj:
+            pass
+        return Lrc(lrcFilename)
 
     def __init__(
             self,
             filename: str | Path,
-            saveUnknownTags: bool = False,
+            toSaveUnknownTags: bool = False,
+            toSaveNoTimestamps: bool = False,
             ) -> None:
         """Loads the specified 'filename' as LRC file and returns an Lrc
         object. 
@@ -246,7 +278,10 @@ class Lrc:
         self._changed: bool = False
 
         # Initializing attributes...
-        self.saveUnknownTags: bool = saveUnknownTags
+        self._toSaveUnknownTags: bool
+        self.toSaveUnknownTags = toSaveUnknownTags
+        self._toSaveNoTimestamps: bool
+        self.toSaveNoTimestamps = toSaveNoTimestamps
 
         self._Parse()
     
@@ -254,6 +289,32 @@ class Lrc:
     def filename(self) -> str | Path:
         """Gets the filename (file system address) of this Lrc object."""
         return self._filename
+    
+    @property
+    def toSaveUnknownTags(self) -> bool:
+        """Gets or sets a boolean value indicating unknown tags must be
+        saved via 'Save' method.
+        """
+        return self._toSaveUnknownTags
+
+    @toSaveUnknownTags.setter
+    def toSaveUnknownTags(self, __snt: bool, /) -> None:
+        if not isinstance(__snt, bool):
+            raise TypeError("'toSaveUnknownTags' must be boolean")
+        self._toSaveUnknownTags = __snt
+    
+    @property
+    def toSaveNoTimestamps(self) -> bool:
+        """Gets or sets  a boolean value indicating LyricsItems with no
+        timestamps must be saved via 'Save' method.
+        """
+        return self._toSaveNoTimestamps
+
+    @toSaveNoTimestamps.setter
+    def toSaveNoTimestamps(self, __snt: bool, /) -> None:
+        if not isinstance(__snt, bool):
+            raise TypeError("'toSaveNoTimestamps' must be boolean")
+        self._toSaveNoTimestamps = __snt
     
     @property
     def tags(self) -> dict[str, str | list[str]]:
@@ -311,13 +372,24 @@ class Lrc:
         except Exception:
             self._errors = backup
             raise TypeError(
-                "'lrcs' is expected to be a list of 'LyricsItems'")
-        if not self.AreTimstampsOk():
+                "'lrcs' is expected to be a list of 'LyricsItem's")
+        if (
+                not self._toSaveNoTimestamps
+                and self._errors & LrcErrors.NO_TIMESTAMP == 
+                    LrcErrors.NO_TIMESTAMP):
+            self._errors = backup
+            raise ValueError("Timestamps must be specified")
+        tsErrors = (
+            LrcErrors.BAD_TIMESTAMP
+            | LrcErrors.DUPLICATE_TIMESTAMPS
+            | LrcErrors.OUT_OF_ORDER)
+        if self._errors & tsErrors:
             self._errors = backup
             raise ValueError(
                 "Timestamps must be specified, unique, and in order")
         # Setting lyrics...
         self._lyrics = lrcs
+        self._changed = True
 
     def _Parse(self) -> None:
         """Parses the file and initializes the attributes."""
@@ -412,21 +484,6 @@ class Lrc:
         
         # Looking for timestamps errors...
         self._CheckTimestamps(self._lyrics)
-
-        '''idx = 0
-        while idx < len(self._lyrics):
-            if self._lyrics[idx].timestamp is not None:
-                prevTime = self._lyrics[idx].timestamp
-                idx += 1
-                break
-            idx += 1
-        while idx < len(self._lyrics):
-            if self._lyrics[idx].timestamp <= prevTime:
-                self._errors |= LrcErrors.OUT_OF_ORDER
-                break
-            else:
-                prevTime = self._lyrics[idx].timestamp
-            idx += 1'''
     
     def _CheckTimestamps(self, lrcs: list[LyricsItem]) -> None:
         """Checks a list of LyricsItems for NO_TIMESTAMP, OUT_OF_ORDER,
@@ -453,7 +510,7 @@ class Lrc:
                 self._errors &= (~LrcErrors.OUT_OF_ORDER)
                 break
         # Looking for DUPLICATE_TIMESTAMPS...
-        lrcs_.sort(key=lambda a: a.timestamp)
+        lrcs_.sort()
         idx = 0
         while True:
             try:
@@ -466,7 +523,9 @@ class Lrc:
                 break
     
     def AreTimstampsOk(self) -> bool:
-        """Specifies whether timestamps are Ok."""
+        """Specifies whether timestamps are Ok and there is no error
+        associated with them.
+        """
         return not(
             self._errors & LrcErrors.NO_TIMESTAMP
             | self._errors & LrcErrors.BAD_TIMESTAMP
@@ -488,7 +547,7 @@ class Lrc:
         """Saves this object to the filename and sets changed property to
         False. It also resolves BAD_DATA, BAD_LAYOUT, and DUPLICATE_TAGS if
         there are, and hence removes their flags. Before calling this API,
-        it is possible to change saveUnknownTags attribute.
+        it is possible to change toSaveUnknownTags attribute.
         """
         with open(self._filename, mode='wt') as lrcFile:
             # Writing tags to the file...
@@ -499,7 +558,7 @@ class Lrc:
                     lrcFile.write(f'[{tag}:{value[-1]}]\n')
 
             # Writing unknown tags to the file...
-            if self.saveUnknownTags and self._unknownTags:
+            if self.toSaveUnknownTags and self._unknownTags:
                 for tag, value in self._unknownTags:
                     if isinstance(value, str):
                         lrcFile.write(f'[{tag}:{value}]\n')
@@ -511,9 +570,13 @@ class Lrc:
                 self._errors &= (~LrcErrors.UNKNOWN_TAGS)
 
             # Writing lyrics to the file...
-            for _lyricsItem in self._lyrics:
+            for lyricsItem in self._lyrics:
+                if lyricsItem.timestamp is None:
+                    timestamp = ''
+                else:
+                    timestamp = lyricsItem.timestamp
                 lrcFile.write(
-                    f'[{str(_lyricsItem.timestamp)}] {_lyricsItem.text}\n')
+                    f'[{str(timestamp)}]{lyricsItem.text}\n')
 
         # Removing some flags...
         self._changed = False
