@@ -7,6 +7,13 @@ from attrs import define, field
 from widgets import WaitFrame
 
 
+class AfterPlayed(IntEnum):
+    STOP_PLAYING = 0
+    REPEAT = 1
+    PLAY_FOLDER = 2
+    REPEAT_FOLDER = 3
+
+
 class AfterProcessInfo:
     def __init__(
             self,

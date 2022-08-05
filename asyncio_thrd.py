@@ -1,10 +1,11 @@
 import asyncio
+from asyncio import AbstractEventLoop
 from concurrent.futures import ProcessPoolExecutor, Future
 from concurrent.futures import CancelledError
 from pathlib import Path
 import sys
 from threading import Thread
-from typing import Any, Callable, Coroutine, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from lrc import Lrc
 from win_utils import LoadingFolderInfo
@@ -30,7 +31,8 @@ class AsyncioThrd(Thread):
             kwargs,
             daemon=daemon)
         self._running = True
-        self._TIME_INTRVL = 0.1
+        self.loop: AbstractEventLoop
+        self.pool: ProcessPoolExecutor
     
     def run(self) -> None:
         # Changing default event loop from Proactor to Selector on Windows
@@ -42,6 +44,8 @@ class AsyncioThrd(Thread):
 
         while self._running:
             try:
+                # creating a subprocess per CPU cores/threads...
+                self.pool = ProcessPoolExecutor()
                 # Setting up the asyncio event loop...
                 self.loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self.loop)
@@ -49,6 +53,7 @@ class AsyncioThrd(Thread):
             # Catching asyncio-related errors here...
             finally:
                 self.loop.close()
+                self.pool.shutdown()
     
     def close(self) -> None:
         # Because we definitely call this method from a thread other than
@@ -88,17 +93,27 @@ class AsyncioThrd(Thread):
             mp3s=mp3s,
             selectIdx=selectIdx)
     
-    def LoadLrc(self, lrc_file: str) -> Lrc:
+    def LoadLrc(
+            self,
+            lrcFile: str,
+            toCreate: bool = False
+            ) -> Lrc:
         return asyncio.run_coroutine_threadsafe(
-            self._LoadLrc(lrc_file),
+            self._LoadLrc(lrcFile, toCreate),
             self.loop)
 
-    async def _LoadLrc(self, lrc_file: str) -> Lrc:
-        with ProcessPoolExecutor() as pPool:
-            try:
-                return await self.loop.run_in_executor(
-                    pPool,
-                    Lrc,
-                    lrc_file)
-            except CancelledError:
-                pass
+    async def _LoadLrc(
+            self,
+            lrcFile: str,
+            toCreate: bool = False
+            ) -> Lrc:
+        try:
+            pLrc = Path(lrcFile)
+            if toCreate and (not pLrc.exists()):
+                Lrc.CreateLrc(lrcFile)
+            return await self.loop.run_in_executor(
+                self.pool,
+                Lrc,
+                lrcFile)
+        except CancelledError:
+            pass

@@ -252,11 +252,25 @@ class Lrc:
             return filename + '.lrc'
     
     @classmethod
-    def CreateLrc(cls, filename: str | Path) -> Lrc:
-        lrcFilename = Lrc.GetLrcFilename(filename)
-        with open(lrcFilename, mode='x') as lrcFileObj:
+    def CreateLrc(cls, filename: str | Path) -> None:
+        """Creates the specified LRC file.
+        
+        Exceptions:
+        TypeError: 'filename' is not either a string or a Path object
+        ValueError: 'filename' does not have '.lrc' extension
+        """
+        # Checking the correctness of 'filename' parameter...
+        if isinstance(filename, str):
+            filename = Path(filename)
+        elif not isinstance(filename, Path):
+            raise TypeError(
+                "'filename' must be either a string or a Path object")
+        if filename.suffix != '.lrc':
+            raise ValueError("'filename' does not have '.lrc' extension")
+        
+        # Creating the LRC file...
+        with open(filename, mode='xt') as lrcFileObj:
             pass
-        return Lrc(lrcFilename)
 
     def __init__(
             self,

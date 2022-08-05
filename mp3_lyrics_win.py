@@ -1,8 +1,6 @@
-from concurrent.futures import CancelledError, Future
-from enum import IntEnum
+from concurrent.futures import CancelledError
 import logging
 from pathlib import Path
-from pprint import pprint
 import re
 import tkinter as tk
 from tkinter import PhotoImage, ttk
@@ -21,16 +19,10 @@ from asyncio_thrd import AsyncioThrd
 from lrc import Lrc
 from megacodist.keyboard import Modifiers
 from sorted_list import SortedList
-from widgets import InfoView, MessageType, MessageView, LyricsView, FolderView
-from widgets import LyricsEditor, WaitFrame
-from win_utils import AfterProcessInfo, LoadingFolderAfterInfo, LoadingLrcAfterInfo
-
-
-class AfterPlayed(IntEnum):
-    STOP_PLAYING = 0
-    REPEAT = 1
-    PLAY_FOLDER = 2
-    REPEAT_FOLDER = 3
+from widgets import InfoView, MessageType, MessageView, LyricsView
+from widgets import LyricsEditor, WaitFrame, FolderView
+from win_utils import LoadingFolderAfterInfo, LoadingLrcAfterInfo
+from win_utils import AfterPlayed
 
 
 class Mp3LyricsWin(tk.Tk):
@@ -55,20 +47,21 @@ class Mp3LyricsWin(tk.Tk):
             + f"+{settings['MLW_X']}+{settings['MLW_Y']}")
         self.state(settings['MLW_STATE'])
 
-        # Specifies whether the MP3 is playing or not
         self._isPlaying: bool = False
-        # Specifies time interval in millisecond for paly methods
+        """Specifies whether the MP3 is playing or not."""
         self._TIME_PLAY: int = 30
-        # Specifies after ID
+        """Specifies time interval in millisecond for paly methods."""
         self._playAfterID: str
-        # Specifies the end of MP3
+        """Specifies after ID for play method"""
         self._MUSIC_END = USEREVENT + 1
-        # Specifies the position of MP3
+        """Specifies the event of the end of MP3"""
         self._pos: float = 0.0
-
+        """Specifies the playback position of MP3"""
         self._RES_DIR = res_dir
+        """Specifies the resource folder of the application."""
         self._TIME_AFTER = 40
         self._asyncThrd = asyncio_thrd
+        """Specifies the asyncio thread for performing operations."""
         self._loadingFolder: LoadingFolderAfterInfo | None = None
         self._loadingLrc: LoadingLrcAfterInfo | None = None
 
@@ -76,7 +69,12 @@ class Mp3LyricsWin(tk.Tk):
             master=self,
             value=settings['MLW_AFTER_PLAYED'])
         self._lrc: Lrc | None = None
+        """The Lrc object associated with the current MP3 file."""
         self._lrcLoaded: bool = False
+        """Specifies whether the LRC file has been loaded or not. This flag
+        in conjuction with _lrc object can determine whether the LRC file
+        exists or not.
+        """
         self._timestamps: SortedList[float] = []
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
@@ -92,6 +90,7 @@ class Mp3LyricsWin(tk.Tk):
 
         # Applying the rest of settings...
         self._lastFile = settings['MLW_LAST_FILE']
+        """Specifies the current MP3 file."""
         self._slider_volume.set(settings['MLW_VOLUME'])
         self._lrcedt.set_column_widths([
             settings['MLW_TS_COL_WIDTH'],
@@ -498,7 +497,7 @@ class Mp3LyricsWin(tk.Tk):
         else:
             if keySymLower == 'delete':
                 self._lrcedt.ClearCells()
-            elif keySymLower == 'plus':
+            elif keySymLower == 'f5':
                 self._lrcedt.SetTimestamp(self._pos)
 
     def _InitPygame(self) -> None:
@@ -588,12 +587,18 @@ class Mp3LyricsWin(tk.Tk):
             del self._loadingFolder
             self._loadingFolder = None
     
-    def _LoadLrc(self, mp3_file: str) -> None:
+    def _LoadLrc(self, mp3File: str, toCreate: bool = False) -> None:
+        """Loads the LRC file associated with the specified MP3 file. The
+        optional toCreate parameter specifies whether to create the LRC file
+        in the case that it does not exist.
+        """
         if self._loadingLrc is None:
             self._SaveLrc()
             self._lrcLoaded = False
 
-            future = self._asyncThrd.LoadLrc(Lrc.GetLrcFilename(mp3_file))
+            future = self._asyncThrd.LoadLrc(
+                Lrc.GetLrcFilename(mp3File),
+                toCreate)
             vwWaitFrame = WaitFrame(
                 master=self._lrcvw,
                 wait_gif=self._IMG_WAIT,
@@ -608,11 +613,11 @@ class Mp3LyricsWin(tk.Tk):
             self._loadingLrc = LoadingLrcAfterInfo(
                 future,
                 afterID,
-                mp3_file,
+                mp3File,
                 [vwWaitFrame, edtWaitFrame,])
             self._loadingLrc.ShowWaitFrames()
         else:
-            self._LoadLrc_cancel(mp3_file)
+            self._LoadLrc_cancel(mp3File)
 
     def _LoadLrc_after(self) -> None:
         if self._loadingLrc.future.done():
@@ -834,12 +839,16 @@ class Mp3LyricsWin(tk.Tk):
             self._lrc.Save()
     
     def _CreateSaveLrc(self) -> None:
+        # Checking whether the LRC file loaded...
         if self._lrc:
+            # The LRC file loaded, saving it...
             self._SaveLrc()
-        elif self._lrcLoaded:
-            pass
         else:
-            self._LoadLrc(self._lastFile)
+            # The LRC file did not either load or exist...
+            # Loading it if exists otherwise creating it...
+            self._LoadLrc(
+                self._lastFile,
+                toCreate=(not self._lrcLoaded))
     
     def _GetClipboardAsList(self) -> list[str]:
         lyrics = self.clipboard_get()

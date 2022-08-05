@@ -523,7 +523,7 @@ class MessageView(Frame):
     def _OnMouseWheel(self, event: tk.Event) -> None:
         if self._mouseInside:
             self._cnvs.yview_scroll(
-                int(-1 * (event.delta / 120)),
+                int(-1 * (event.delta / 24)),
                 'units')
     
     def _OnSizeChanged(self, event: tk.Event) -> None:
@@ -807,6 +807,7 @@ class LyricsEditor(Sheet):
                 data.insert(
                     rowStart,
                     LyricsItem(''))
+                self._changed = True
                 self.set_sheet_data(data, reset_col_positions=False)
                 self.select_cell(rowStart - 1, 1)
 
@@ -826,31 +827,49 @@ class LyricsEditor(Sheet):
                 data.insert(
                     rowEnd,
                     LyricsItem(''))
+                self._changed = True
                 self.set_sheet_data(data, reset_col_positions=False)
                 self.select_cell(rowEnd, 1)
     
     def ClearCells(self) -> None:
-        rowStart, colStart, rowEnd, colEnd = self.get_all_selection_boxes()[0]
+        # Getting the selected box...
+        selectedBox = self.get_all_selection_boxes()
+        if not selectedBox:
+            # No selected cells, returning...
+            return
+        rowStart, colStart, rowEnd, colEnd = selectedBox[0]
         data = self.get_sheet_data()
         for rowIdx in range(rowStart, rowEnd):
             for colIdx in range(colStart, colEnd):
                 data[rowIdx][colIdx] = ''
+        self._changed = True
         self.set_sheet_data(data, reset_col_positions=False)
     
     def RemoveRows(self) -> None:
-        rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
+        # Getting the selected box...
+        selectedBox = self.get_all_selection_boxes()
+        if not selectedBox:
+            # No selected cells, returning...
+            return
+        rowStart, _, rowEnd, _ = selectedBox[0]
         data = self.get_sheet_data()
         data = [*data[0:rowStart], *data[rowEnd:]]
+        self._changed = True
         self.set_sheet_data(data, reset_col_positions=False)
         self.deselect()
     
     def SetTimestamp(self, pos: float) -> None:
         if self._lrc:
-            # Getting the selection box...
-            rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
+            # Getting the selected box...
+            selectedBox = self.get_all_selection_boxes()
+            if not selectedBox:
+                # No selected cells, returning...
+                return
+            rowStart, _, rowEnd, _ = selectedBox[0]
             if (rowEnd - rowStart) == 1:
                 data = self.get_sheet_data()
                 data[rowStart][0] = Timestamp.FromFloat(pos)
+                self._changed = True
                 self.set_sheet_data(data, reset_col_positions=False)
                 if rowEnd < len(data):
                     self.select_cell(rowEnd, 0)
