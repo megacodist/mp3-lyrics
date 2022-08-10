@@ -406,6 +406,11 @@ class Mp3LyricsWin(tk.Tk):
         self._menubar.add_cascade(
             label='Player',
             menu=self._menu_player)
+        self._menu_player.add_command(
+            label='Play/pause',
+            accelerator='P',
+            command=self._PlayPauseMp3)
+        self._menu_player.add_separator()
         self._menu_player.add_cascade(
             label='After played',
             menu=self._menu_afterPlayed)
@@ -434,10 +439,10 @@ class Mp3LyricsWin(tk.Tk):
             label='Create/save LRC',
             accelerator='Ctrl+S',
             command=self._CreateSaveLrc)
+        self._menu_etitor.add_separator()
         self._menu_etitor.add_cascade(
             label='Insert a row',
             menu=self._menu_insertRow)
-        self._menu_etitor.add_separator()
         self._menu_etitor.add_command(
             label='Clear cell(s)',
             accelerator='Del')
@@ -447,8 +452,13 @@ class Mp3LyricsWin(tk.Tk):
             command=self._lrcedt.RemoveRows)
         self._menu_etitor.add_separator()
         self._menu_etitor.add_command(
-            label='Paste clipboard',
-            command=self._PasteClipboard)
+            label='Override from clipboard',
+            accelerator='Ctrl+V',
+            command=self._lrcedt.OverrideFromClipboard)
+        self._menu_etitor.add_command(
+            label='Insert from clipboard',
+            accelerator='Ctrl+I',
+            command=self._lrcedt.InsertFromClipboard)
     
     def _OnKeyPressed(self, event: tk.Event) -> None:
         altCtrlShift = (
@@ -487,8 +497,15 @@ class Mp3LyricsWin(tk.Tk):
             # Checking Ctrl+L...
             elif keySymLower == 'l':
                 self._lrcedt.InsertRowBelow()
+            # Checking Ctrl+S...
             elif keySymLower == 's':
                 self._CreateSaveLrc()
+            # Checking Ctrl+V...
+            elif keySymLower == 'v':
+                self._lrcedt.OverrideFromClipboard()
+            # Checking Ctrl+I...
+            elif keySymLower == 'i':
+                self._lrcedt.InsertFromClipboard()
         # Checking Shift...
         elif (event.state & Modifiers.SHIFT) == Modifiers.SHIFT:
             if keySymLower == 'delete':
@@ -499,28 +516,40 @@ class Mp3LyricsWin(tk.Tk):
                 self._lrcedt.ClearCells()
             elif keySymLower == 'f5':
                 self._lrcedt.SetTimestamp(self._pos)
+            elif keySymLower == 'p':
+                self._PlayPauseMp3()
 
     def _InitPygame(self) -> None:
         # Initializing the 'pygame.mixer' module...
         init()
         music.set_volume(self._slider_volume.get() / 10)
     
-    def _InitPlayer(self, mp3_file: str) -> None:
+    def _InitPlayer(self, mp3File: str) -> None:
+        # Definition of variables...
+        exceptionOccurred: bool = True
+        """Tracks whether an exception occurred or not."""
+
+        # Starting...
         try:
             self._ChangeGui_NotPlayable()
             music.stop()
-            music.load(mp3_file)
-            mp3 = MP3(mp3_file)
+            music.load(mp3File)
+            mp3 = MP3(mp3File)
             self._slider_playTime['to'] = mp3.info.length
-            self._lastFile = mp3_file
+            self._lastFile = mp3File
+            exceptionOccurred = False
         except HeaderNotFoundError:
             self._msgvw.AddMessage(
                 title='MP3 error',
-                message=f"Problem loading '{mp3_file}'",
+                message=f"Problem loading '{mp3File}'",
                 type=MessageType.ERROR)
         else:
+            self.title(f'{Path(self._lastFile).name} - MP3 Lyrics')
             self._ChangeGui_Playable()
-            self._LoadLrc(mp3_file)
+            self._LoadLrc(mp3File)
+        finally:
+            if exceptionOccurred:
+                self.title('MP3 Lyrics')
     
     def _OpenFile(self) -> None:
         if self._lastFile:
@@ -617,6 +646,13 @@ class Mp3LyricsWin(tk.Tk):
                 [vwWaitFrame, edtWaitFrame,])
             self._loadingLrc.ShowWaitFrames()
         else:
+            # Informing of cancling of loading LRC...
+            self._msgvw.AddMessage(
+                message=(
+                    'Loading LRC of '
+                    + f"'{self._loadingLrc.mp3File}' was calceled."),
+                title='Canceling loading LRC',
+                type=MessageType.INFO)
             self._LoadLrc_cancel(mp3File)
 
     def _LoadLrc_after(self) -> None:
@@ -836,6 +872,8 @@ class Mp3LyricsWin(tk.Tk):
     def _SaveLrc(self) -> None:
         self._lrcedt.ApplyLyrics()
         if self._lrc and self._lrc.changed:
+            self._lrc['by'] = 'https://twitter.com/megacodist'
+            self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
             self._lrc.Save()
     
     def _CreateSaveLrc(self) -> None:
@@ -849,19 +887,6 @@ class Mp3LyricsWin(tk.Tk):
             self._LoadLrc(
                 self._lastFile,
                 toCreate=(not self._lrcLoaded))
-    
-    def _GetClipboardAsList(self) -> list[str]:
-        lyrics = self.clipboard_get()
-        return lyrics.strip().splitlines()
-    
-    def _PasteClipboard(self) -> None:
-        lines = self._GetClipboardAsList()
-        if not lines:
-            showerror(message='No text in clipboard')
-            return
-    
-    def _InsertClipboard(self) -> None:
-        pass
 
     def _ChangeGui_Playable(self) -> None:
         self._btn_palyPause['state'] = tk.NORMAL

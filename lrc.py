@@ -565,23 +565,29 @@ class Lrc:
         """
         with open(self._filename, mode='wt') as lrcFile:
             # Writing tags to the file...
-            for tag, value in self._tags:
+            for tag, value in self._tags.items():
                 if isinstance(value, str):
                     lrcFile.write(f'[{tag}:{value}]\n')
                 else:
                     lrcFile.write(f'[{tag}:{value[-1]}]\n')
+            nAllTags = len(self._tags)
 
             # Writing unknown tags to the file...
             if self.toSaveUnknownTags and self._unknownTags:
-                for tag, value in self._unknownTags:
+                for tag, value in self._unknownTags.items():
                     if isinstance(value, str):
                         lrcFile.write(f'[{tag}:{value}]\n')
                     else:
                         lrcFile.write(f'[{tag}:{value[-1]}]\n')
+                nAllTags += len(self._unknownTags)
                 self._errors |= LrcErrors.UNKNOWN_TAGS
             else:
                 # Removing UNKNOWN_TAGS flag...
                 self._errors &= (~LrcErrors.UNKNOWN_TAGS)
+            
+            # Printing an empty line between tags & lyrics...
+            if nAllTags:
+                lrcFile.write('\n')
 
             # Writing lyrics to the file...
             for lyricsItem in self._lyrics:

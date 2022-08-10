@@ -750,6 +750,7 @@ class LyricsEditor(Sheet):
         super().__init__(parent, **kwargs)
 
         self._changed: bool = False
+        """Specifies whether contents changed after 'Populate' methid."""
         self._lrc: Lrc
 
         self.headers([
@@ -769,8 +770,14 @@ class LyricsEditor(Sheet):
         self.extra_bindings(
             'end_edit_cell',
             self._OnCellEdited)
+        self.extra_bindings(
+            'end_row_index_drag_drop',
+            self._OnRowDragDroped)
     
     def _OnCellEdited(self, event: EditCellEvent) -> None:
+        self._changed = True
+    
+    def _OnRowDragDroped(self) -> None:
         self._changed = True
     
     def ApplyLyrics(self) -> None:
@@ -781,7 +788,6 @@ class LyricsEditor(Sheet):
     def Populate(self, lrc: Lrc) -> None:
         self._lrc = lrc
         if self._lrc:
-            #self.disable_bindings('hide_columns')
             self.set_sheet_data(
                 self._lrc.lyrics,
                 reset_col_positions=False)
@@ -789,50 +795,88 @@ class LyricsEditor(Sheet):
             self.set_sheet_data(
                 [],
                 reset_col_positions=False)
-            #self.enable_bindings('hide_columns')
+        self._changed = False
     
     def InsertRowAbove(self, *args, **kwargs) -> None:
         if self._lrc:
-            # Checking whether sheet is empty...
+            '''# Checking whether sheet is empty...
             data = self.get_sheet_data()
             if not len(data):
                 data.append(LyricsItem(''))
                 self.set_sheet_data(data, reset_col_positions=False)
-                return
-
+                return'''
+            
             # Getting the selection box...
-            rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
-            if (rowEnd - rowStart) == 1:
-                data = self.get_sheet_data()
+            data = self.get_sheet_data()
+            selectedBox = self.get_all_selection_boxes()
+            if selectedBox:
+                # There are selected cells,
+                # Inserting a row at the end of them...
+                rowStart, colStart, rowEnd, colEnd = selectedBox[0]
                 data.insert(
                     rowStart,
                     LyricsItem(''))
-                self._changed = True
-                self.set_sheet_data(data, reset_col_positions=False)
-                self.select_cell(rowStart - 1, 1)
+                # Selecting the inserted row...
+                if colEnd - colStart == 1:
+                    rowIdx = rowEnd
+                    colIdx = colStart
+                else:
+                    rowIdx = rowStart
+                    colIdx = 1
+            else:
+                # No selected cells,
+                # Inserting a row at the strat of the sheet...
+                data.insert(
+                    0,
+                    LyricsItem(''))
+                rowIdx = 0
+                colIdx = 1
+
+            self._changed = True
+            self.set_sheet_data(data, reset_col_positions=False)
+            self.select_cell(rowIdx, colIdx)              
 
     def InsertRowBelow(self) -> None:
         if self._lrc:
-            # Checking whether sheet is empty...
+            '''# Checking whether sheet is empty...
             data = self.get_sheet_data()
             if not len(data):
                 data.append(LyricsItem(''))
                 self.set_sheet_data(data, reset_col_positions=False)
-                return
+                return'''
 
             # Getting the selection box...
-            rowStart, _, rowEnd, _ = self.get_all_selection_boxes()[0]
-            if (rowEnd - rowStart) == 1:
-                data = self.get_sheet_data()
+            data = self.get_sheet_data()
+            selectedBox = self.get_all_selection_boxes()
+            if selectedBox:
+                # There are selected cells,
+                # Inserting a row at the end of them...
+                rowStart, colStart, rowEnd, colEnd = selectedBox[0]
                 data.insert(
                     rowEnd,
                     LyricsItem(''))
-                self._changed = True
-                self.set_sheet_data(data, reset_col_positions=False)
-                self.select_cell(rowEnd, 1)
-    
+                # Selecting the inserted row...
+                if colEnd - colStart == 1:
+                    rowIdx = rowEnd
+                    colIdx = colStart
+                else:
+                    rowIdx = rowEnd
+                    colIdx = 1
+            else:
+                # No selected cells,
+                # Inserting a row at the end of the sheet...
+                rowIdx = len(data)
+                data.insert(
+                    rowIdx,
+                    LyricsItem(''))
+                colIdx = 1
+
+            self._changed = True
+            self.set_sheet_data(data, reset_col_positions=False)
+            self.select_cell(rowIdx, colIdx)
+
     def ClearCells(self) -> None:
-        # Getting the selected box...
+        '''# Getting the selected box...
         selectedBox = self.get_all_selection_boxes()
         if not selectedBox:
             # No selected cells, returning...
@@ -843,6 +887,14 @@ class LyricsEditor(Sheet):
             for colIdx in range(colStart, colEnd):
                 data[rowIdx][colIdx] = ''
         self._changed = True
+        self.set_sheet_data(data, reset_col_positions=False)'''
+        selectedCells = self.get_selected_cells()
+        data = self.get_sheet_data()
+        for cell in selectedCells:
+            rowIdx, colIdx = cell
+            if data[rowIdx][colIdx]:
+                self._changed = True
+                data[rowIdx][colIdx] = ''
         self.set_sheet_data(data, reset_col_positions=False)
     
     def RemoveRows(self) -> None:
@@ -873,3 +925,42 @@ class LyricsEditor(Sheet):
                 self.set_sheet_data(data, reset_col_positions=False)
                 if rowEnd < len(data):
                     self.select_cell(rowEnd, 0)
+    
+    def _GetClipboardAsList(self) -> list[str]:
+        clipboard = self.clipboard_get()
+        return clipboard.strip().splitlines()
+    
+    def OverrideFromClipboard(self) -> None:
+        if self._lrc:
+            data = self.get_sheet_data()
+            nData: int = len(data)
+            selectedBox = self.get_all_selection_boxes()
+            if not data:
+                rowIdx = 0
+            elif selectedBox:
+                rowIdx, _, _, _ = selectedBox[0]
+            else:
+                # No selection in the populated sheet, returning...
+                return
+            
+            try:
+                clipLines = self._GetClipboardAsList()
+                lineIdx = 0
+                while True:
+                    data[rowIdx][1] = clipLines[lineIdx]
+                    lineIdx += 1
+                    rowIdx += 1
+            except IndexError:
+                # Checking whether clipboard exhausted...
+                if lineIdx >= nData:
+                    # clipboard exhausted, we've done, returning...
+                    return
+                # The sheet exhausted, appending the rest of clipboard...
+                for idx in range(lineIdx, nData):
+                    data.append(LyricsItem(clipLines[idx]))
+
+            if clipLines:
+                self._changed = True
+
+    def InsertFromClipboard(self) -> None:
+        pass
