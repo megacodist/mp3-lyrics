@@ -5,7 +5,7 @@ accompany resource for some MP3 files.
 from __future__ import annotations
 from copy import deepcopy
 from enum import IntFlag
-from math import modf
+from math import modf, trunc
 from pathlib import Path
 import re
 from typing import overload
@@ -33,13 +33,23 @@ class Timestamp:
                 pass
 
     @classmethod
-    def FromFloat(cls, seconds: float) -> Timestamp:
+    def FromFloat(
+            cls,
+            seconds: float,
+            *,
+            ndigits: int = 2
+            ) -> Timestamp:
         """Converts a floating-pont number to an instance of Timastamp, for
-        examle 87.3 will be converted to 1:17.3.
+        examle 87.3 will be converted to 1:17.3. The 'ndigits' keyword
+        specifies number of digits after decimal point to kep.
         """
+        seconds = round(seconds, ndigits)
         xx, secs = modf(seconds)
         mm, ss = divmod(int(secs), 60)
-        return Timestamp(minutes=mm, seconds=ss, milliseconds=round(xx, 3))
+        return Timestamp(
+            minutes=mm,
+            seconds=ss,
+            milliseconds=round(xx, ndigits))
 
     def __init__(
             self,
@@ -56,6 +66,9 @@ class Timestamp:
         self._minutes: int
         self._seconds: int
         self._milliseconds: float
+        print(minutes)
+        print(seconds)
+        print(milliseconds)
 
         # Setting attribute...
         self.minutes = minutes

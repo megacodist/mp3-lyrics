@@ -65,21 +65,25 @@ class AsyncioThrd(Thread):
     
     def LoadFolder(
             self,
-            mp3_file: str
+            mp3_file: str,
+            *,
+            key: Callable[[str], Any] | None = None
             ) -> Future[LoadingFolderInfo]:
         return asyncio.run_coroutine_threadsafe(
-            self._LoadFolder(mp3_file),
+            self._LoadFolder(mp3_file, key=key),
             self.loop)
 
     async def _LoadFolder(
             self,
-            mp3_file: str
+            mp3_file: str,
+            key: Callable[[str], Any] | None = None
             ) -> Future[LoadingFolderInfo]:
         mp3PathObj = Path(mp3_file).resolve()
         # Getting folder...
         folder = str(mp3PathObj.parent)
         # Getting MP3 files in the folder...
         mp3s = list(Path(folder).glob('*.mp3'))
+        mp3s.sort(key=key)
         mp3s = [
             path.name
             for path in mp3s]

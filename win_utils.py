@@ -24,6 +24,7 @@ class AfterProcessInfo:
         self.afterID = afterID
     
     def __del__(self) -> None:
+        # Deallocating inside resources...
         del self.future
         del self.afterID
 
@@ -33,13 +34,19 @@ class LoadingFolderAfterInfo(AfterProcessInfo):
             self,
             future: Future,
             afterID: str,
+            folder: str,
             waitFrame: WaitFrame | None = None
             ) -> None:
         super().__init__(future, afterID)
+        self.folder = folder
         self.waitFrame = waitFrame
     
     def __del__(self) -> None:
-        self.waitFrame = None
+        # Breaking inbound refrences...
+        self.folder = None
+        # Deallocating inside resources...
+        del self.waitFrame
+        # Deallocating 'future' & 'afterID' in super class...
         super().__del__()
 
 
@@ -56,9 +63,12 @@ class LoadingLrcAfterInfo(AfterProcessInfo):
         self.waitFrames = waitFrames
     
     def __del__(self) -> None:
+        # Breaking inbound refrences...
+        self.mp3File = None
+        # Deallocating inside resources...
         for wf in self.waitFrames:
-            wf = None
-        del self.mp3File
+            del wf
+        # Deallocating 'future' & 'afterID' in super class...
         super().__del__()
     
     def ShowWaitFrames(self) -> None:

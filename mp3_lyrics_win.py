@@ -3,21 +3,23 @@ import logging
 from pathlib import Path
 import re
 import tkinter as tk
-from tkinter import PhotoImage, ttk
+from tkinter import TOP, PhotoImage, ttk
 from tkinter.filedialog import askopenfilename
-from tkinter.messagebox import showerror
+from tkinter.messagebox import askyesno
+from typing import Annotated
 
 from mutagen.mp3 import MP3, HeaderNotFoundError
 import PIL.Image
 import PIL.ImageTk
+import pygame
 from pygame import init, USEREVENT
 import pygame.event
 from pygame.mixer import music, quit
 
 from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
-from lrc import Lrc
-from megacodist.keyboard import Modifiers
+from lrc import Lrc, Timestamp
+from megacodist.keyboard import Modifiers, KeyCodes
 from sorted_list import SortedList
 from widgets import InfoView, MessageType, MessageView, LyricsView
 from widgets import LyricsEditor, WaitFrame, FolderView
@@ -57,11 +59,17 @@ class Mp3LyricsWin(tk.Tk):
         """Specifies the event of the end of MP3"""
         self._pos: float = 0.0
         """Specifies the playback position of MP3"""
+        self._nDecimal: int = 2
+        """Specifies number of digits after decimal point that the
+        position of the playback must be rounded to.
+        """
         self._RES_DIR = res_dir
         """Specifies the resource folder of the application."""
         self._TIME_AFTER = 40
         self._asyncThrd = asyncio_thrd
-        """Specifies the asyncio thread for performing operations."""
+        """Specifies the asyncio thread capable of performing operations
+        related to this application.
+        """
         self._loadingFolder: LoadingFolderAfterInfo | None = None
         self._loadingLrc: LoadingLrcAfterInfo | None = None
 
@@ -75,6 +83,8 @@ class Mp3LyricsWin(tk.Tk):
         in conjuction with _lrc object can determine whether the LRC file
         exists or not.
         """
+        self._mp3: MP3 | None = None
+        """The mutagen.mp3.MP3 object of the _lastFile file."""
         self._timestamps: SortedList[float] = []
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
@@ -82,7 +92,7 @@ class Mp3LyricsWin(tk.Tk):
         self._IMG_VOLUME: PIL.ImageTk.PhotoImage
         self._IMG_MP3: PIL.ImageTk.PhotoImage
         self._IMG_LRC: PIL.ImageTk.PhotoImage
-        self._IMG_WAIT: list[PIL.ImageTk.PhotoImage]
+        self._GIF_WAIT: list[PIL.ImageTk.PhotoImage]
 
         self._LoadRes()
         self._InitGui()
@@ -151,12 +161,12 @@ class Mp3LyricsWin(tk.Tk):
         # Loading 'wait.gif...
         gifFile = self._RES_DIR / 'wait.gif'
         gifFile = PIL.Image.open(gifFile)
-        self._IMG_WAIT: list[PhotoImage] = []
+        self._GIF_WAIT: list[PhotoImage] = []
         idx = 0
         while True:
             try:
                 gifFile.seek(idx)
-                self._IMG_WAIT.append(
+                self._GIF_WAIT.append(
                     PIL.ImageTk.PhotoImage(image=gifFile))
                 idx += 1
             except EOFError :
@@ -249,6 +259,83 @@ class Mp3LyricsWin(tk.Tk):
         self._slider_volume.pack(side=tk.LEFT)
 
         #
+        self._frm_posLength = ttk.Frame(
+            self._frm_controls,
+            relief=tk.GROOVE)
+        self._frm_posLength.columnconfigure(0, weight=1)
+        self._frm_posLength.columnconfigure(2, weight=1)
+        self._frm_posLength.columnconfigure(3, weight=1)
+        self._frm_posLength.rowconfigure(0, weight=1)
+        self._frm_posLength.rowconfigure(1, weight=1)
+        self._frm_posLength.pack(side=tk.LEFT)
+
+        #
+        self._lbl_posMin = ttk.Label(
+            self._frm_posLength)
+        self._lbl_posMin.grid(
+            column=0,
+            row=0,
+            sticky=tk.W)
+        
+        #
+        self._lbl_posColon = ttk.Label(
+            self._frm_posLength,
+            text=':')
+        self._lbl_posColon.grid(
+            column=1,
+            row=0,
+            sticky=tk.W)
+
+        #
+        self._lbl_posSec = ttk.Label(
+            self._frm_posLength)
+        self._lbl_posSec.grid(
+            column=2,
+            row=0,
+            sticky=tk.W)
+
+        #
+        self._lbl_posMilli = ttk.Label(
+            self._frm_posLength)
+        self._lbl_posMilli.grid(
+            column=3,
+            row=0,
+            sticky=tk.W)
+        
+        #
+        self._lbl_lengthMin = ttk.Label(
+            self._frm_posLength)
+        self._lbl_lengthMin.grid(
+            column=0,
+            row=1,
+            sticky=tk.W)
+        
+        #
+        self._lbl_lengthColon = ttk.Label(
+            self._frm_posLength,
+            text=':')
+        self._lbl_lengthColon.grid(
+            column=1,
+            row=1,
+            sticky=tk.W)
+        
+        #
+        self._lbl_lengthSec = ttk.Label(
+            self._frm_posLength)
+        self._lbl_lengthSec.grid(
+            column=2,
+            row=1,
+            sticky=tk.W)
+        
+        #
+        self._lbl_lengthMilli = ttk.Label(
+            self._frm_posLength)
+        self._lbl_lengthMilli.grid(
+            column=3,
+            row=1,
+            sticky=tk.W)
+
+        #
         self._frm_playTime = ttk.Frame(
             master=self._frm_main)
         self._frm_playTime.grid(
@@ -322,18 +409,18 @@ class Mp3LyricsWin(tk.Tk):
         self._vscrlbr_mp3s = ttk.Scrollbar(
             master=self._frm_mp3s,
             orient='vertical')
-        self._trvw_mp3s = FolderView(
+        self._foldervw = FolderView(
             master=self._frm_mp3s,
             image=self._IMG_MP3,
             select_callback=self._InitPlayer,
             xscrollcommand=self._hscrlbr_mp3s.set,
             yscrollcommand=self._vscrlbr_mp3s.set)
-        self._trvw_mp3s.grid(
+        self._foldervw.grid(
             column=0,
             row=0,
             sticky=tk.NSEW)
-        self._hscrlbr_mp3s['command'] = self._trvw_mp3s.xview
-        self._vscrlbr_mp3s['command'] = self._trvw_mp3s.yview
+        self._hscrlbr_mp3s['command'] = self._foldervw.xview
+        self._vscrlbr_mp3s['command'] = self._foldervw.yview
         self._hscrlbr_mp3s.grid(
             column=0,
             row=1,
@@ -342,7 +429,7 @@ class Mp3LyricsWin(tk.Tk):
             column=1,
             row=0,
             sticky=tk.NS)
-        self._trvw_mp3s.grid(
+        self._foldervw.grid(
             column=0,
             row=0,
             sticky=tk.NSEW)
@@ -374,9 +461,9 @@ class Mp3LyricsWin(tk.Tk):
             label='File',
             menu=self._menu_file)
         self._menu_file.add_command(
-            label='Open a file...',
+            label='Open an MP3...',
             accelerator='Ctrl+O',
-            command=self._OpenFile)
+            command=self._OpenMp3)
         
         # Ceating 'After played' submenu...
         self._menu_afterPlayed = tk.Menu(
@@ -436,9 +523,18 @@ class Mp3LyricsWin(tk.Tk):
             label='Editor',
             menu=self._menu_etitor)
         self._menu_etitor.add_command(
-            label='Create/save LRC',
+            label='Create LRC',
+            accelerator='Ctrl+N',
+            command=self._CreateLrc)
+        self._menu_etitor.add_command(
+            label='Save LRC',
             accelerator='Ctrl+S',
-            command=self._CreateSaveLrc)
+            command=self._SaveLrc)
+        self._menu_etitor.add_command(
+            label='Discard changes')
+        self._menu_etitor.add_command(
+            label='Delete LRC',
+            command=self._DeleteLrc)
         self._menu_etitor.add_separator()
         self._menu_etitor.add_cascade(
             label='Insert a row',
@@ -453,7 +549,7 @@ class Mp3LyricsWin(tk.Tk):
         self._menu_etitor.add_separator()
         self._menu_etitor.add_command(
             label='Override from clipboard',
-            accelerator='Ctrl+V',
+            accelerator='Ctrl+U',
             command=self._lrcedt.OverrideFromClipboard)
         self._menu_etitor.add_command(
             label='Insert from clipboard',
@@ -468,7 +564,6 @@ class Mp3LyricsWin(tk.Tk):
         altCtrl = Modifiers.ALT | Modifiers.CONTROL
         altShift = Modifiers.ALT | Modifiers.SHIFT
         ctrlShift = Modifiers.CONTROL | Modifiers.SHIFT
-        keySymLower = event.keysym.lower()
 
         # Checking for keyboard modefiers...
         # Checking Alt+Ctrl+Shift...
@@ -489,35 +584,50 @@ class Mp3LyricsWin(tk.Tk):
         # Checking Ctrl...
         elif (event.state & Modifiers.CONTROL) == Modifiers.CONTROL:
             # Checking Ctrl+O...
-            if keySymLower == 'o':
-                self._OpenFile()
+            if event.keycode == KeyCodes.O:
+                self._OpenMp3()
             # Checking Ctrl+K...
-            elif keySymLower == 'k':
+            elif event.keycode == KeyCodes.K:
                 self._lrcedt.InsertRowAbove()
             # Checking Ctrl+L...
-            elif keySymLower == 'l':
+            elif event.keycode == KeyCodes.L:
                 self._lrcedt.InsertRowBelow()
             # Checking Ctrl+S...
-            elif keySymLower == 's':
-                self._CreateSaveLrc()
+            elif event.keycode == KeyCodes.S:
+                self._SaveLrc()
             # Checking Ctrl+V...
-            elif keySymLower == 'v':
+            elif event.keycode == KeyCodes.U:
                 self._lrcedt.OverrideFromClipboard()
             # Checking Ctrl+I...
-            elif keySymLower == 'i':
+            elif event.keycode == KeyCodes.I:
                 self._lrcedt.InsertFromClipboard()
+            # Checking Ctrl+N...
+            elif event.keycode == KeyCodes.N:
+                self._CreateLrc()
         # Checking Shift...
         elif (event.state & Modifiers.SHIFT) == Modifiers.SHIFT:
-            if keySymLower == 'delete':
+            if event.keycode == KeyCodes.DELETE:
                 self._lrcedt.RemoveRows()
         # No Alt, Ctrl, or Shift...
         else:
-            if keySymLower == 'delete':
+            if event.keycode == KeyCodes.DELETE:
                 self._lrcedt.ClearCells()
-            elif keySymLower == 'f5':
+            elif event.keycode == KeyCodes.F5:
                 self._lrcedt.SetTimestamp(self._pos)
-            elif keySymLower == 'p':
+            elif event.keycode == KeyCodes.P:
                 self._PlayPauseMp3()
+    
+    @property
+    def pos(self) -> float:
+        return self._pos
+
+    @pos.setter
+    def pos(self, __pos: float, /) -> None:
+        self._pos = __pos
+        timestamp = Timestamp.FromFloat(__pos,ndigits=self._nDecimal)
+        self._lbl_posMin['text'] = str(timestamp.minutes)
+        self._lbl_posSec['text'] = str(timestamp.seconds)
+        self._lbl_posMilli['text'] = str(timestamp.milliseconds)[1:]
 
     def _InitPygame(self) -> None:
         # Initializing the 'pygame.mixer' module...
@@ -527,31 +637,42 @@ class Mp3LyricsWin(tk.Tk):
     def _InitPlayer(self, mp3File: str) -> None:
         # Definition of variables...
         exceptionOccurred: bool = True
-        """Tracks whether an exception occurred or not."""
 
         # Starting...
         try:
-            self._ChangeGui_NotPlayable()
+            self._UpdateGui_NotPlayable()
             music.stop()
             music.load(mp3File)
-            mp3 = MP3(mp3File)
-            self._slider_playTime['to'] = mp3.info.length
+            self._mp3 = MP3(mp3File)
+            self._slider_playTime['to'] = self._mp3.info.length
+            self._SetLength(self._mp3.info.length)
             self._lastFile = mp3File
             exceptionOccurred = False
         except HeaderNotFoundError:
             self._msgvw.AddMessage(
-                title='MP3 error',
+                title='MP3 metadata error',
                 message=f"Problem loading '{mp3File}'",
+                type=MessageType.ERROR)
+        except pygame.error as err:
+            self._msgvw.AddMessage(
+                title='MP3 file error',
+                message=f"{str(err)}",
                 type=MessageType.ERROR)
         else:
             self.title(f'{Path(self._lastFile).name} - MP3 Lyrics')
-            self._ChangeGui_Playable()
+            self._UpdateGui_Playable()
             self._LoadLrc(mp3File)
         finally:
             if exceptionOccurred:
                 self.title('MP3 Lyrics')
     
-    def _OpenFile(self) -> None:
+    def _SetLength(self, __leng: float) -> None:
+        timestamp = Timestamp.FromFloat(__leng, ndigits=self._nDecimal)
+        self._lbl_lengthMin['text'] = str(timestamp.minutes)
+        self._lbl_lengthSec['text'] = str(timestamp.seconds)
+        self._lbl_lengthMilli['text'] = str(timestamp.milliseconds)[1:]
+    
+    def _OpenMp3(self) -> None:
         if self._lastFile:
             folder = str(Path(self._lastFile).resolve().parent)
         else:
@@ -567,10 +688,12 @@ class Mp3LyricsWin(tk.Tk):
             self._LoadFolder(mp3File)
     
     def _LoadFolder(self, folder: str) -> None:
-        future = self._asyncThrd.LoadFolder(folder)
+        future = self._asyncThrd.LoadFolder(
+            folder,
+            key=FolderView.GetComparer)
         waitFrame = WaitFrame(
-            master=self._trvw_mp3s,
-            wait_gif=self._IMG_WAIT,
+            master=self._foldervw,
+            wait_gif=self._GIF_WAIT,
             cancel_callback=self._LoadFolder_cancel)
         afterID = self.after(
             self._TIME_AFTER,
@@ -578,8 +701,8 @@ class Mp3LyricsWin(tk.Tk):
         self._loadingFolder = LoadingFolderAfterInfo(
             future,
             afterID,
+            folder,
             waitFrame)
-        self._loadingFolder.folder = folder
         self._loadingFolder.waitFrame.Show()
     
     def _LoadFolder_after(self) -> None:
@@ -587,7 +710,7 @@ class Mp3LyricsWin(tk.Tk):
             self._loadingFolder.waitFrame.Close()
             try:
                 folderInfo = self._loadingFolder.future.result()
-                self._trvw_mp3s.AddFilenames(
+                self._foldervw.AddFilenames(
                     folderInfo.folder,
                     folderInfo.mp3s,
                     folderInfo.selectIdx)
@@ -622,19 +745,22 @@ class Mp3LyricsWin(tk.Tk):
         in the case that it does not exist.
         """
         if self._loadingLrc is None:
-            self._SaveLrc()
-            self._lrcLoaded = False
+            if self._lrc and self._lrc.changed:
+                toSave = askyesno(message='Do you want to save the LRC?')
+                if toSave:
+                    self._SaveLrc()
+                self._lrcLoaded = False
 
             future = self._asyncThrd.LoadLrc(
                 Lrc.GetLrcFilename(mp3File),
                 toCreate)
             vwWaitFrame = WaitFrame(
                 master=self._lrcvw,
-                wait_gif=self._IMG_WAIT,
+                wait_gif=self._GIF_WAIT,
                 cancel_callback=self._LoadLrc_cancel)
             edtWaitFrame = WaitFrame(
                 master=self._lrcedt,
-                wait_gif=self._IMG_WAIT,
+                wait_gif=self._GIF_WAIT,
                 cancel_callback=self._LoadLrc_cancel)
             afterID = self.after(
                 self._TIME_AFTER,
@@ -654,6 +780,8 @@ class Mp3LyricsWin(tk.Tk):
                 title='Canceling loading LRC',
                 type=MessageType.INFO)
             self._LoadLrc_cancel(mp3File)
+            print('Alaki')
+            print(mp3File)
 
     def _LoadLrc_after(self) -> None:
         if self._loadingLrc.future.done():
@@ -735,7 +863,7 @@ class Mp3LyricsWin(tk.Tk):
             self.after_cancel(self._playAfterID)
     
     def _UpdatePlayTimeSlider(self, start_offset: float) -> None:
-        self._pos = (music.get_pos() / 1_000) + start_offset
+        self.pos = (music.get_pos() / 1_000) + start_offset
         # Checking whether the MP3 has finished or not...
         for event in pygame.event.get():
             if event.type == self._MUSIC_END:
@@ -831,7 +959,9 @@ class Mp3LyricsWin(tk.Tk):
         quit()
 
         if self._lrc and self._lrc.changed:
-            self._SaveLrc()
+            toSave = askyesno(message='Do you want to save the LRC?')
+            if toSave:
+                self._SaveLrc()
 
         # Saving settings...
         settings = {}
@@ -870,32 +1000,53 @@ class Mp3LyricsWin(tk.Tk):
         self.destroy()
 
     def _SaveLrc(self) -> None:
-        self._lrcedt.ApplyLyrics()
-        if self._lrc and self._lrc.changed:
-            self._lrc['by'] = 'https://twitter.com/megacodist'
-            self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
-            self._lrc.Save()
-    
-    def _CreateSaveLrc(self) -> None:
-        # Checking whether the LRC file loaded...
         if self._lrc:
-            # The LRC file loaded, saving it...
-            self._SaveLrc()
+            self._lrcedt.ApplyLyrics()
+            if self._lrc.changed:
+                self._lrc['by'] = 'https://twitter.com/megacodist'
+                self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
+                self._lrc.Save()
+    
+    def _CreateLrc(self) -> None:
+        if self._lrc:
+            self._msgvw.AddMessage(
+                title='Cannot create LRC',
+                message=f"The '{self._lrc.filename}' has been loaded.",
+                type=MessageType.WARNING)
         else:
-            # The LRC file did not either load or exist...
-            # Loading it if exists otherwise creating it...
             self._LoadLrc(
                 self._lastFile,
-                toCreate=(not self._lrcLoaded))
+                toCreate=self._lrcLoaded)
+    
+    def _DeleteLrc(self) -> None:
+        # Insert code here to delete the LRC file...
+        pLrc = Path(Lrc.GetLrcFilename(self._lastFile))
+        if pLrc.exists():
+            toDelete = askyesno(message='Do you want to delete the LRC?')
+            if toDelete:
+                pLrc.unlink()
+                del self._lrc
+                self._lrc = None
+                self._lrcLoaded = True
+                self._UpdateGui_Lrc()
+    
+    def _DiscardChanges(self) -> None:
+        self._LoadLrc(self._lastFile)
 
-    def _ChangeGui_Playable(self) -> None:
+    def _UpdateGui_Playable(self) -> None:
         self._btn_palyPause['state'] = tk.NORMAL
+        self._menu_player.entryconfigure(
+            'Play/pause',
+            state=tk.NORMAL)
 
-    def _ChangeGui_Pausable(self) -> None:
+    def _UpdateGui_Pausable(self) -> None:
         pass
 
-    def _ChangeGui_NotPlayable(self) -> None:
+    def _UpdateGui_NotPlayable(self) -> None:
         self._btn_palyPause['state'] = tk.DISABLED
+        self._menu_player.entryconfigure(
+            'Play/pause',
+            state=tk.DISABLED)
     
     def _UpdateGui_Lrc(self) -> None:
         # Setting timestamps...
@@ -914,6 +1065,7 @@ class Mp3LyricsWin(tk.Tk):
         self._lrcedt.Populate(self._lrc)
 
         # Populating the InofView...
+        self._infovw.PopulateMp3(self._mp3)
         self._infovw.PopulateLrc(self._lrc)
 
         # Adding a message if necessary...

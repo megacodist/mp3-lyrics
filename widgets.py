@@ -2,10 +2,11 @@ from enum import IntEnum
 from pathlib import Path
 import tkinter as tk
 from tkinter import Frame, ttk
-from tkinter.font import nametofont
+from tkinter.font import nametofont, Font
 from typing import Callable
 
 from PIL.ImageTk import PhotoImage
+from mutagen.mp3 import MP3
 from tkhtmlview import HTMLLabel
 from tksheet import Sheet
 from tksheet._tksheet_other_classes import EditCellEvent
@@ -20,6 +21,16 @@ class MessageType(IntEnum):
 
 
 class FolderView(ttk.Treeview):
+    @classmethod
+    def GetComparer(cls, filename: str) -> tuple[str, str]:
+        """Returns a tuple which the first element is file name without
+        path and extension and the second element is the extension. For
+        example for the file name 'some/path/stem.ext', it returns
+        ('stem', '.ext',)
+        """
+        pFilename = Path(filename)
+        return pFilename.stem.lower(), pFilename.suffix.lower()
+
     def __init__(
             self,
             master: tk.Tk,
@@ -30,24 +41,36 @@ class FolderView(ttk.Treeview):
         kwargs['selectmode'] = 'browse'
         super().__init__(master, **kwargs)
 
-        # Getting the font of the tree view...
-        self._font = None
-        try:
-            self._font = self['font']
-        except tk.TclError:
-            self._font = nametofont('TkDefaultFont')
-
         self.heading('#0', anchor=tk.W)
         self.column(
             '#0',
             width=200,
             stretch=False,
             anchor=tk.W)
+
+        # Getting the font of the tree view...
+        self._font: Font
+        """Specifies the font of the FolderView."""
+        try:
+            self._font = self['font']
+        except tk.TclError:
+            self._font = nametofont('TkDefaultFont')
         
         self._IMG = image
-        self._dir: str | None
-        self._selectCallback = select_callback
-        self._toIgnoreNextSelect: bool
+        """Specifies the image of all items in the FolderView."""
+        self._dir: str | None = None
+        """Specifies the directory of the FolderView."""
+        self._selectCallback: Callable[[str], None] = select_callback
+        """Specifies a callback which is called when an item is selected in
+        the FolderView
+        """
+        self._toIgnoreNextSelect: bool = False
+        """Specifies whether to ignore the next Select event."""
+        self._prevSelectedItem: str = ''
+        """Specifies the previous selected item. it helps avoid firing
+        Select event for the selected item. So to stimulate the Select
+        event, you have to select another item in the list.
+        """
 
         self.bind(
             '<<TreeviewSelect>>',
@@ -82,7 +105,7 @@ class FolderView(ttk.Treeview):
         if select_idx is not None:
             self.selection_add(
                 self.get_children('')[select_idx])
-        # Scrolling the treeview to the selected item...
+        # Scrolling the FolderView to the selected item...
         self.yview_moveto(select_idx / len(filenames))
 
     def _Clear(self) -> None:
@@ -91,14 +114,17 @@ class FolderView(ttk.Treeview):
             self.delete(iid)
     
     def _OnItemSelectionChanged(self, event: tk.Event) -> None:
-        if self._toIgnoreNextSelect:
-            self._toIgnoreNextSelect = False
-        else:
-            selectedItemID = self.selection()
-            if selectedItemID:
-                text = self.item(selectedItemID[0], option='text')
-                self._selectCallback(
-                    str(Path(self._dir) / text))
+        selectedItemID = self.selection()
+        if selectedItemID:
+            selectedItemID = selectedItemID[0]
+            if not self._toIgnoreNextSelect:
+                if self._prevSelectedItem != selectedItemID:
+                    text = self.item(selectedItemID, option='text')
+                    self._selectCallback(
+                        str(Path(self._dir) / text))
+            else:
+                self._toIgnoreNextSelect = False
+            self._prevSelectedItem = selectedItemID
 
 class WaitFrame(ttk.Frame):
     def __init__(
@@ -111,13 +137,15 @@ class WaitFrame(ttk.Frame):
         super().__init__(master, **kwargs)
         self['relief'] = tk.RIDGE
 
+        # Storing inbound references...
         self._master = master
-        self._IMG_WAIT = wait_gif
+        self._GIF_WAIT = wait_gif
         self._cancelCallback = cancel_callback
 
         self._afterID: str | None = None
-        self._TIME_INTERVAL = 40
+        self._TIME_AFTER = 40
 
+        # Configuring the grid geometry manager...
         self.columnconfigure(
             index=0,
             weight=1)
@@ -128,7 +156,7 @@ class WaitFrame(ttk.Frame):
         #
         self._lbl_wait = ttk.Label(
             master=self,
-            image=self._IMG_WAIT[0])
+            image=self._GIF_WAIT[0])
         self._lbl_wait.grid(
             column=0,
             row=0,
@@ -152,7 +180,7 @@ class WaitFrame(ttk.Frame):
             rely=0.5,
             anchor=tk.CENTER)
         self._afterID = self.after(
-            self._TIME_INTERVAL,
+            self._TIME_AFTER,
             self._AnimateGif,
             1)
 
@@ -172,14 +200,25 @@ class WaitFrame(ttk.Frame):
     
     def _AnimateGif(self, idx: int) -> None:
         try:
-            self._lbl_wait['image'] = self._IMG_WAIT[idx]
+            self._lbl_wait['image'] = self._GIF_WAIT[idx]
         except IndexError:
             idx = 0
-            self._lbl_wait['image'] = self._IMG_WAIT[idx]
+            self._lbl_wait['image'] = self._GIF_WAIT[idx]
         self._afterID = self.after(
-            self._TIME_INTERVAL,
+            self._TIME_AFTER,
             self._AnimateGif,
             idx + 1)
+    
+    def __del__(self) -> None:
+        # Breaking inbound references...
+        self._master = None
+        self._GIF_WAIT = None
+        self._cancelCallback = None
+        # Deallocating inside resources...
+        del self._TIME_AFTER
+        del self._btn_cancel
+        del self._lbl_wait
+        del self._afterID
 
 
 class LyricsView(ttk.Frame):
@@ -448,7 +487,7 @@ class MessageView(Frame):
     _colors = {
         MessageType.INFO: 'LightBlue1',
         MessageType.WARNING: '#e9e48f',
-        MessageType.ERROR: '#e47e8f'}
+        MessageType.ERROR: '#e5a3a3'}
 
     def __init__(
             self,
@@ -620,6 +659,7 @@ class InfoView(ttk.Frame):
 
         self._gap: int = gap
         self._lrc: Lrc | None = None
+        self._mp3: MP3 | None = None
 
         self._InitGui()
     
@@ -730,8 +770,8 @@ class InfoView(ttk.Frame):
     def PopulateFile(self) -> None:
         pass
 
-    def PopulateMp3(self) -> None:
-        pass
+    def PopulateMp3(self, mp3: MP3) -> None:
+        self._mp3 = mp3
     
     def PopulateLrc(self, lrc: Lrc) -> None:
         self._lrc = lrc
@@ -784,6 +824,7 @@ class LyricsEditor(Sheet):
         if self._changed:
             data = self.get_sheet_data()
             self._lrc.lyrics = data
+            self._changed = False
     
     def Populate(self, lrc: Lrc) -> None:
         self._lrc = lrc
@@ -797,15 +838,8 @@ class LyricsEditor(Sheet):
                 reset_col_positions=False)
         self._changed = False
     
-    def InsertRowAbove(self, *args, **kwargs) -> None:
-        if self._lrc:
-            '''# Checking whether sheet is empty...
-            data = self.get_sheet_data()
-            if not len(data):
-                data.append(LyricsItem(''))
-                self.set_sheet_data(data, reset_col_positions=False)
-                return'''
-            
+    def InsertRowAbove(self) -> None:
+        if self._lrc:            
             # Getting the selection box...
             data = self.get_sheet_data()
             selectedBox = self.get_all_selection_boxes()
@@ -838,13 +872,6 @@ class LyricsEditor(Sheet):
 
     def InsertRowBelow(self) -> None:
         if self._lrc:
-            '''# Checking whether sheet is empty...
-            data = self.get_sheet_data()
-            if not len(data):
-                data.append(LyricsItem(''))
-                self.set_sheet_data(data, reset_col_positions=False)
-                return'''
-
             # Getting the selection box...
             data = self.get_sheet_data()
             selectedBox = self.get_all_selection_boxes()
@@ -876,18 +903,6 @@ class LyricsEditor(Sheet):
             self.select_cell(rowIdx, colIdx)
 
     def ClearCells(self) -> None:
-        '''# Getting the selected box...
-        selectedBox = self.get_all_selection_boxes()
-        if not selectedBox:
-            # No selected cells, returning...
-            return
-        rowStart, colStart, rowEnd, colEnd = selectedBox[0]
-        data = self.get_sheet_data()
-        for rowIdx in range(rowStart, rowEnd):
-            for colIdx in range(colStart, colEnd):
-                data[rowIdx][colIdx] = ''
-        self._changed = True
-        self.set_sheet_data(data, reset_col_positions=False)'''
         selectedCells = self.get_selected_cells()
         data = self.get_sheet_data()
         for cell in selectedCells:
@@ -933,7 +948,6 @@ class LyricsEditor(Sheet):
     def OverrideFromClipboard(self) -> None:
         if self._lrc:
             data = self.get_sheet_data()
-            nData: int = len(data)
             selectedBox = self.get_all_selection_boxes()
             if not data:
                 rowIdx = 0
@@ -952,12 +966,13 @@ class LyricsEditor(Sheet):
                     rowIdx += 1
             except IndexError:
                 # Checking whether clipboard exhausted...
-                if lineIdx >= nData:
+                if lineIdx >= len(data):
                     # clipboard exhausted, we've done, returning...
                     return
                 # The sheet exhausted, appending the rest of clipboard...
-                for idx in range(lineIdx, nData):
+                for idx in range(lineIdx, len(clipLines)):
                     data.append(LyricsItem(clipLines[idx]))
+            self.set_sheet_data(data, reset_col_positions=False)
 
             if clipLines:
                 self._changed = True
