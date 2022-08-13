@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 import re
 import tkinter as tk
-from tkinter import TOP, PhotoImage, ttk
+from tkinter import GROOVE, TOP, PhotoImage, ttk
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import askyesno
 from typing import Annotated
@@ -21,7 +21,7 @@ from asyncio_thrd import AsyncioThrd
 from lrc import Lrc, Timestamp
 from megacodist.keyboard import Modifiers, KeyCodes
 from sorted_list import SortedList
-from widgets import InfoView, MessageType, MessageView, LyricsView
+from widgets import ABView, InfoView, MessageType, MessageView, LyricsView
 from widgets import LyricsEditor, WaitFrame, FolderView
 from win_utils import LoadingFolderAfterInfo, LoadingLrcAfterInfo
 from win_utils import AfterPlayed
@@ -244,19 +244,35 @@ class Mp3LyricsWin(tk.Tk):
         self._btn_palyPause.pack(side=tk.LEFT)
 
         #
+        self._frm_volume = ttk.Frame(
+            self._frm_controls,
+            relief=tk.GROOVE)
+        self._frm_volume.pack(
+            side=tk.LEFT,
+            ipadx=2,
+            ipady=2,
+            padx=2)
+
+        #
         self._lbl_volume = ttk.Label(
-            master=self._frm_controls,
+            master=self._frm_volume,
             image=self._IMG_VOLUME)
-        self._lbl_volume.pack(side=tk.LEFT)
+        self._lbl_volume.pack(
+            side=tk.LEFT,
+            padx=1,
+            pady=1)
 
         #
         self._slider_volume = ttk.Scale(
-            master=self._frm_controls,
+            master=self._frm_volume,
             from_=0.0,
             to=10.0,
             length=100,
             command=self._ChangeVolume)
-        self._slider_volume.pack(side=tk.LEFT)
+        self._slider_volume.pack(
+            side=tk.LEFT,
+            padx=1,
+            pady=1)
 
         #
         self._frm_posLength = ttk.Frame(
@@ -264,18 +280,23 @@ class Mp3LyricsWin(tk.Tk):
             relief=tk.GROOVE)
         self._frm_posLength.columnconfigure(0, weight=1)
         self._frm_posLength.columnconfigure(2, weight=1)
-        self._frm_posLength.columnconfigure(3, weight=1)
+        self._frm_posLength.columnconfigure(4, weight=1)
         self._frm_posLength.rowconfigure(0, weight=1)
         self._frm_posLength.rowconfigure(1, weight=1)
-        self._frm_posLength.pack(side=tk.LEFT)
+        self._frm_posLength.pack(
+            side=tk.LEFT,
+            ipadx=4,
+            ipady=4)
 
         #
         self._lbl_posMin = ttk.Label(
-            self._frm_posLength)
+            self._frm_posLength,
+            text='0')
         self._lbl_posMin.grid(
             column=0,
             row=0,
-            sticky=tk.W)
+            padx=(1, 0,),
+            pady=(1, 0,))
         
         #
         self._lbl_posColon = ttk.Label(
@@ -284,31 +305,48 @@ class Mp3LyricsWin(tk.Tk):
         self._lbl_posColon.grid(
             column=1,
             row=0,
-            sticky=tk.W)
+            padx=0,
+            pady=(1, 0,))
 
         #
         self._lbl_posSec = ttk.Label(
-            self._frm_posLength)
+            self._frm_posLength,
+            text='0')
         self._lbl_posSec.grid(
             column=2,
             row=0,
-            sticky=tk.W)
+            padx=0,
+            pady=(1, 0,))
+        
+        #
+        self._lbl_posDot = ttk.Label(
+            self._frm_posLength,
+            text='.')
+        self._lbl_posDot.grid(
+            column=3,
+            row=0,
+            padx=0,
+            pady=(1, 0,))
 
         #
         self._lbl_posMilli = ttk.Label(
-            self._frm_posLength)
+            self._frm_posLength,
+            text='0')
         self._lbl_posMilli.grid(
-            column=3,
+            column=4,
             row=0,
-            sticky=tk.W)
+            padx=(0, 1,),
+            pady=(1, 0,))
         
         #
         self._lbl_lengthMin = ttk.Label(
-            self._frm_posLength)
+            self._frm_posLength,
+            text='0')
         self._lbl_lengthMin.grid(
             column=0,
             row=1,
-            sticky=tk.W)
+            padx=(1, 0,),
+            pady=(0, 1))
         
         #
         self._lbl_lengthColon = ttk.Label(
@@ -317,40 +355,69 @@ class Mp3LyricsWin(tk.Tk):
         self._lbl_lengthColon.grid(
             column=1,
             row=1,
-            sticky=tk.W)
+            padx=0,
+            pady=(0, 1))
         
         #
         self._lbl_lengthSec = ttk.Label(
-            self._frm_posLength)
+            self._frm_posLength,
+            text='0')
         self._lbl_lengthSec.grid(
             column=2,
             row=1,
-            sticky=tk.W)
+            padx=0,
+            pady=(0, 1))
+        
+        #
+        self._lbl_lengthDot = ttk.Label(
+            self._frm_posLength,
+            text='.')
+        self._lbl_lengthDot.grid(
+            column=3,
+            row=1,
+            padx=0,
+            pady=(0, 1))
         
         #
         self._lbl_lengthMilli = ttk.Label(
-            self._frm_posLength)
+            self._frm_posLength,
+            text='0')
         self._lbl_lengthMilli.grid(
-            column=3,
+            column=4,
             row=1,
-            sticky=tk.W)
+            padx=(0, 1),
+            pady=(0, 1))
 
         #
         self._frm_playTime = ttk.Frame(
-            master=self._frm_main)
+            self._frm_main,
+            relief=tk.GROOVE)
         self._frm_playTime.grid(
             column=0,
             row=1,
-            sticky=tk.NSEW)
+            sticky=tk.NSEW,
+            ipadx=4,
+            ipady=4)
 
         #
         self._slider_playTime = ttk.Scale(
             master=self._frm_playTime,
             from_=0)
         self._slider_playTime.pack(
-            side=tk.LEFT,
+            side=tk.TOP,
             fill=tk.X,
-            expand=1)
+            expand=1,
+            padx=2,
+            pady=(2, 0))
+        
+        #
+        self._abvw = ABView(self._frm_playTime)
+        self._abvw.pack(
+            side=tk.TOP,
+            fill=tk.X,
+            expand=1,
+            padx=2,
+            pady=(0, 2))
         
         #
         self._frm_notebook = ttk.Frame(
@@ -627,7 +694,7 @@ class Mp3LyricsWin(tk.Tk):
         timestamp = Timestamp.FromFloat(__pos,ndigits=self._nDecimal)
         self._lbl_posMin['text'] = str(timestamp.minutes)
         self._lbl_posSec['text'] = str(timestamp.seconds)
-        self._lbl_posMilli['text'] = str(timestamp.milliseconds)[1:]
+        self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
 
     def _InitPygame(self) -> None:
         # Initializing the 'pygame.mixer' module...
@@ -646,6 +713,7 @@ class Mp3LyricsWin(tk.Tk):
             self._mp3 = MP3(mp3File)
             self._slider_playTime['to'] = self._mp3.info.length
             self._SetLength(self._mp3.info.length)
+            self.pos = 0
             self._lastFile = mp3File
             exceptionOccurred = False
         except HeaderNotFoundError:
@@ -670,7 +738,7 @@ class Mp3LyricsWin(tk.Tk):
         timestamp = Timestamp.FromFloat(__leng, ndigits=self._nDecimal)
         self._lbl_lengthMin['text'] = str(timestamp.minutes)
         self._lbl_lengthSec['text'] = str(timestamp.seconds)
-        self._lbl_lengthMilli['text'] = str(timestamp.milliseconds)[1:]
+        self._lbl_lengthMilli['text'] = str(timestamp.milliseconds)[2:]
     
     def _OpenMp3(self) -> None:
         if self._lastFile:
@@ -863,7 +931,12 @@ class Mp3LyricsWin(tk.Tk):
             self.after_cancel(self._playAfterID)
     
     def _UpdatePlayTimeSlider(self, start_offset: float) -> None:
-        self.pos = (music.get_pos() / 1_000) + start_offset
+        try:
+            self.pos = (music.get_pos() / 1_000) + start_offset
+        except ValueError:
+            logging.error(
+                f"There was a problem converting {self._pos}"
+                + f" to a {str(Timestamp.__class__)} object")
         # Checking whether the MP3 has finished or not...
         for event in pygame.event.get():
             if event.type == self._MUSIC_END:
@@ -1047,6 +1120,8 @@ class Mp3LyricsWin(tk.Tk):
         self._menu_player.entryconfigure(
             'Play/pause',
             state=tk.DISABLED)
+        self._SetLength(0)
+        self.pos = 0
     
     def _UpdateGui_Lrc(self) -> None:
         # Setting timestamps...

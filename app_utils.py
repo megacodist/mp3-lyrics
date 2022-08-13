@@ -165,7 +165,7 @@ def ConfigureLogging(filename: str | Path) -> None:
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    # Logging platform information...
+    '''# Logging platform information...
     loggerFileStream = logging.FileHandler(filename, 'w')
     loggerFormatter = logging.Formatter('%(message)s')
     loggerFileStream.setFormatter(loggerFormatter)
@@ -180,7 +180,7 @@ def ConfigureLogging(filename: str | Path) -> None:
     logging.info(logNote + '\n\n')
 
     # Logging program events...
-    logger.removeHandler(loggerFileStream)
+    logger.removeHandler(loggerFileStream)'''
     loggerFileStream = logging.FileHandler(filename, 'a')
     loggerFormatter = logging.Formatter(
         fmt=(

@@ -66,9 +66,6 @@ class Timestamp:
         self._minutes: int
         self._seconds: int
         self._milliseconds: float
-        print(minutes)
-        print(seconds)
-        print(milliseconds)
 
         # Setting attribute...
         self.minutes = minutes

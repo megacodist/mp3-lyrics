@@ -1,9 +1,9 @@
 from enum import IntEnum
 from pathlib import Path
 import tkinter as tk
-from tkinter import Frame, ttk
+from tkinter import Frame, Misc, ttk
 from tkinter.font import nametofont, Font
-from typing import Callable
+from typing import Any, Callable
 
 from PIL.ImageTk import PhotoImage
 from mutagen.mp3 import MP3
@@ -845,7 +845,7 @@ class LyricsEditor(Sheet):
             selectedBox = self.get_all_selection_boxes()
             if selectedBox:
                 # There are selected cells,
-                # Inserting a row at the end of them...
+                # Inserting a row at the start of them...
                 rowStart, colStart, rowEnd, colEnd = selectedBox[0]
                 data.insert(
                     rowStart,
@@ -979,3 +979,16 @@ class LyricsEditor(Sheet):
 
     def InsertFromClipboard(self) -> None:
         pass
+
+
+class ABView(tk.Canvas):
+    def __init__(
+            self,
+            master: Misc | None = None,
+            width: int = 150,
+            height: int = 5,
+            **kwargs
+            ) -> None:
+        super().__init__(master, **kwargs)
+        self['width'] = width
+        self['height'] = height
