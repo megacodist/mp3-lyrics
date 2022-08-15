@@ -56,7 +56,7 @@ class Mp3LyricsWin(tk.Tk):
         self._playAfterID: str
         """Specifies after ID for play method"""
         self._MUSIC_END = USEREVENT + 1
-        """Specifies the event of the end of MP3"""
+        """Specifies the event of the end of MP3 playback"""
         self._pos: float = 0.0
         """Specifies the playback position of MP3"""
         self._nDecimal: int = 2
@@ -564,6 +564,22 @@ class Mp3LyricsWin(tk.Tk):
             label='Play/pause',
             accelerator='P',
             command=self._PlayPauseMp3)
+        self._menu_player.add_command(
+            label='Stop',
+            accelerator='O',
+            command=self._StopPlaying)
+        self._menu_player.add_separator()
+        self._menu_player.add_command(
+            label='Set A',
+            accelerator='A',
+            command=self._SetA)
+        self._menu_player.add_command(
+            label='Set B',
+            accelerator='B',
+            command=self._SetB)
+        self._menu_player.add_command(
+            label='Remove A-B',
+            command=self._RemoveABRepeat)
         self._menu_player.add_separator()
         self._menu_player.add_cascade(
             label='After played',
@@ -683,6 +699,12 @@ class Mp3LyricsWin(tk.Tk):
                 self._lrcedt.SetTimestamp(self._pos)
             elif event.keycode == KeyCodes.P:
                 self._PlayPauseMp3()
+            elif event.keycode == KeyCodes.A:
+                self._SetA()
+            elif event.keycode == KeyCodes.B:
+                self._SetB()
+            elif event.keycode == KeyCodes.O:
+                self._StopPlaying()
     
     @property
     def pos(self) -> float:
@@ -713,6 +735,7 @@ class Mp3LyricsWin(tk.Tk):
             self._mp3 = MP3(mp3File)
             self._slider_playTime['to'] = self._mp3.info.length
             self._SetLength(self._mp3.info.length)
+            self._abvw.length = self._mp3.info.length
             self.pos = 0
             self._lastFile = mp3File
             exceptionOccurred = False
@@ -942,23 +965,32 @@ class Mp3LyricsWin(tk.Tk):
             if event.type == self._MUSIC_END:
                 # The MP3 finished, deciding on the action...
                 self._DecideAfterPlayed()
-                break
+                return
+        # Looking for A-B repeat...
+        if self._abvw.IsSet() and (not self._abvw.InInside(self._pos)):
+            # The A-B repeat is set & slider is outside of it...
+            self._MoveMp3To(self._abvw.a)
+            start_offset = self._abvw.a
         else:
             # The MP3 not finished
             # Updating Play Time slider...
             self._slider_playTime.set(self._pos)
-            # Highlighting the current lyrics...
-            _, idx = self._timestamps.index(self._pos)
-            self._lrcvw.Highlight(idx - 1)
-            self._playAfterID = self.after(
-                self._TIME_PLAY,
-                self._UpdatePlayTimeSlider,
-                start_offset)
+        # Highlighting the current lyrics...
+        _, idx = self._timestamps.index(self._pos)
+        self._lrcvw.Highlight(idx - 1)
+        self._playAfterID = self.after(
+            self._TIME_PLAY,
+            self._UpdatePlayTimeSlider,
+            start_offset)
+    
+    def _MoveMp3To(self, __pos: float, /) -> None:
+        music.play(start=__pos)
+        self._slider_playTime.set(__pos)
     
     def _DecideAfterPlayed(self) -> None:
         match self._afterPlayed.get():
             case int(AfterPlayed.STOP_PLAYING):
-                self._ResetPlayTimeSlider()
+                self._StopPlaying()
             case int(AfterPlayed.REPEAT):
                 music.rewind()
                 music.play()
@@ -972,10 +1004,14 @@ class Mp3LyricsWin(tk.Tk):
             case int(AfterPlayed.REPEAT_FOLDER):
                 pass
     
-    def _ResetPlayTimeSlider(self) -> None:
-        self._isPlaying = False
+    def _StopPlaying(self) -> None:
         self._btn_palyPause['image'] = self._IMG_PLAY
-        self._slider_playTime.set(0.0)
+        if self._isPlaying:
+            self._isPlaying = False
+            self.after_cancel(self._playAfterID)
+            music.stop()
+            self._slider_playTime.set(0.0)
+            self._RemoveABRepeat()
     
     def _GetMp3PosBySiderX(self, x: int) -> int:
         """Returns the offset of the MP3 by the X coordinate of the Play Time
@@ -1071,6 +1107,15 @@ class Mp3LyricsWin(tk.Tk):
 
         AppSettings().Update(settings)
         self.destroy()
+    
+    def _RemoveABRepeat(self) -> None:
+        self._abvw.length = self._mp3.info.length
+    
+    def _SetA(self) -> None:
+        self._abvw.a = self.pos
+    
+    def _SetB(self) -> None:
+        self._abvw.b = self.pos
 
     def _SaveLrc(self) -> None:
         if self._lrc:
