@@ -3,9 +3,10 @@ import logging
 from pathlib import Path
 import re
 import tkinter as tk
-from tkinter import PhotoImage, ttk
+from tkinter import GROOVE, TOP, PhotoImage, ttk
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import askyesno
+from typing import Annotated
 
 from mutagen.mp3 import MP3, HeaderNotFoundError
 import PIL.Image
@@ -13,8 +14,7 @@ import PIL.ImageTk
 import pygame
 from pygame import init, USEREVENT
 import pygame.event
-from pygame.mixer import music  as PygameMusic
-from pygame.mixer import quit as PygameQuit
+from pygame.mixer import music, quit
 
 from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
@@ -51,32 +51,21 @@ class Mp3LyricsWin(tk.Tk):
 
         self._isPlaying: bool = False
         """Specifies whether the MP3 is playing or not."""
-        self._TIME_OPERATIONS = 40
-        """Specifies a time interval in millisecond for operations
-        methods.
-        """
-        self._TIME_PLAYBACK: int = 30
-        """Specifies a time interval in millisecond for palyback
-        methods.
-        """
-        self._syncPTAfterID: str | None = ''
-        """Specifies an after ID for synchronization of play-time
-        slider with the music playback.
-        """
-        self._keepPTAfterID: str | None = ''
-        """Specifies an after ID to keep play-time slider at a specific
-        position.
-        """
+        self._TIME_PLAY: int = 30
+        """Specifies time interval in millisecond for paly methods."""
+        self._playAfterID: str
+        """Specifies after ID for play method"""
         self._MUSIC_END = USEREVENT + 1
         """Specifies the event of the end of MP3 playback"""
         self._pos: float = 0.0
         """Specifies the playback position of MP3"""
-        self._ndigits: int = 2
+        self._nDecimal: int = 2
         """Specifies number of digits after decimal point that the
         position of the playback must be rounded to.
         """
         self._RES_DIR = res_dir
         """Specifies the resource folder of the application."""
+        self._TIME_AFTER = 40
         self._asyncThrd = asyncio_thrd
         """Specifies the asyncio thread capable of performing operations
         related to this application.
@@ -87,9 +76,6 @@ class Mp3LyricsWin(tk.Tk):
         self._afterPlayed = tk.IntVar(
             master=self,
             value=settings['MLW_AFTER_PLAYED'])
-        """Specifies what to do when the playback of the current file
-        finishes. Its value is integer number of AfterPlayed enumeration.
-        """
         self._lrc: Lrc | None = None
         """The Lrc object associated with the current MP3 file."""
         self._lrcLoaded: bool = False
@@ -129,13 +115,13 @@ class Mp3LyricsWin(tk.Tk):
             self._OnKeyPressed)
         self._slider_playTime.bind(
             '<ButtonPress-1>',
-            self._OnPTSliderPressed)
+            self._OnPlayTimeSliderPressed)
         self._slider_playTime.bind(
             '<B1-Motion>',
-            self._OnPTSliderDraged)
+            self._DragPlayTimeSlider)
         self._slider_playTime.bind(
             '<ButtonRelease-1>',
-            self._OnPTSliderRelease)
+            self._OnPlayTimeSliderRelease)
         self.protocol('WM_DELETE_WINDOW', self._OnClosingWin)
 
         self._InitPlayer(self._lastFile)
@@ -254,7 +240,7 @@ class Mp3LyricsWin(tk.Tk):
             master=self._frm_controls,
             image=self._IMG_PLAY,
             state=tk.DISABLED,
-            command=self._PlayPause)
+            command=self._PlayPauseMp3)
         self._btn_palyPause.pack(side=tk.LEFT)
 
         #
@@ -577,7 +563,7 @@ class Mp3LyricsWin(tk.Tk):
         self._menu_player.add_command(
             label='Play/pause',
             accelerator='P',
-            command=self._PlayPause)
+            command=self._PlayPauseMp3)
         self._menu_player.add_command(
             label='Stop',
             accelerator='O',
@@ -712,7 +698,7 @@ class Mp3LyricsWin(tk.Tk):
             elif event.keycode == KeyCodes.F5:
                 self._lrcedt.SetTimestamp(self._pos)
             elif event.keycode == KeyCodes.P:
-                self._PlayPause()
+                self._PlayPauseMp3()
             elif event.keycode == KeyCodes.A:
                 self._SetA()
             elif event.keycode == KeyCodes.B:
@@ -727,7 +713,7 @@ class Mp3LyricsWin(tk.Tk):
     @pos.setter
     def pos(self, __pos: float, /) -> None:
         self._pos = __pos
-        timestamp = Timestamp.FromFloat(__pos,ndigits=self._ndigits)
+        timestamp = Timestamp.FromFloat(__pos,ndigits=self._nDecimal)
         self._lbl_posMin['text'] = str(timestamp.minutes)
         self._lbl_posSec['text'] = str(timestamp.seconds)
         self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
@@ -735,7 +721,7 @@ class Mp3LyricsWin(tk.Tk):
     def _InitPygame(self) -> None:
         # Initializing the 'pygame.mixer' module...
         init()
-        PygameMusic.set_volume(self._slider_volume.get() / 10)
+        music.set_volume(self._slider_volume.get() / 10)
     
     def _InitPlayer(self, mp3File: str) -> None:
         # Definition of variables...
@@ -744,9 +730,8 @@ class Mp3LyricsWin(tk.Tk):
         # Starting...
         try:
             self._UpdateGui_NotPlayable()
-            PygameMusic.stop()
-            PygameMusic.unload()
-            PygameMusic.load(mp3File)
+            music.stop()
+            music.load(mp3File)
             self._mp3 = MP3(mp3File)
             self._slider_playTime['to'] = self._mp3.info.length
             self._SetLength(self._mp3.info.length)
@@ -773,7 +758,7 @@ class Mp3LyricsWin(tk.Tk):
                 self.title('MP3 Lyrics')
     
     def _SetLength(self, __leng: float) -> None:
-        timestamp = Timestamp.FromFloat(__leng, ndigits=self._ndigits)
+        timestamp = Timestamp.FromFloat(__leng, ndigits=self._nDecimal)
         self._lbl_lengthMin['text'] = str(timestamp.minutes)
         self._lbl_lengthSec['text'] = str(timestamp.seconds)
         self._lbl_lengthMilli['text'] = str(timestamp.milliseconds)[2:]
@@ -802,7 +787,7 @@ class Mp3LyricsWin(tk.Tk):
             wait_gif=self._GIF_WAIT,
             cancel_callback=self._LoadFolder_cancel)
         afterID = self.after(
-            self._TIME_OPERATIONS,
+            self._TIME_AFTER,
             self._LoadFolder_after)
         self._loadingFolder = LoadingFolderAfterInfo(
             future,
@@ -825,20 +810,20 @@ class Mp3LyricsWin(tk.Tk):
                 self._loadingFolder = None
         else:
             self._loadingFolder.afterID = self.after(
-                self._TIME_OPERATIONS,
+                self._TIME_AFTER,
                 self._LoadFolder_after)
     
     def _LoadFolder_cancel(self) -> None:
         self._loadingFolder.future.cancel()
         self.after_cancel(self._loadingFolder.afterID)
         self.after(
-            self._TIME_OPERATIONS,
+            self._TIME_AFTER,
             self._LoadFolder_cancel_after)
     
     def _LoadFolder_cancel_after(self) -> None:
         if not self._loadingFolder.future.cancelled():
             self.after(
-                self._TIME_OPERATIONS,
+                self._TIME_AFTER,
                 self._LoadFolder_cancel_after)
         else:
             self._loadingFolder.waitFrame.Close()
@@ -869,7 +854,7 @@ class Mp3LyricsWin(tk.Tk):
                 wait_gif=self._GIF_WAIT,
                 cancel_callback=self._LoadLrc_cancel)
             afterID = self.after(
-                self._TIME_OPERATIONS,
+                self._TIME_AFTER,
                 self._LoadLrc_after)
             self._loadingLrc = LoadingLrcAfterInfo(
                 future,
@@ -913,7 +898,7 @@ class Mp3LyricsWin(tk.Tk):
                 self._loadingLrc = None
         else:
             self._loadingLrc.afterID = self.after(
-                self._TIME_OPERATIONS,
+                self._TIME_AFTER,
                 self._LoadLrc_after)
     
     def _LoadLrc_cancel(
@@ -924,7 +909,7 @@ class Mp3LyricsWin(tk.Tk):
         self._loadingLrc.future.cancel()
         self.after_cancel(self._loadingLrc.afterID)
         self.after(
-            self._TIME_OPERATIONS,
+            self._TIME_AFTER,
             self._LoadLrc_cancel_after,
             mp3_file)
     
@@ -934,7 +919,7 @@ class Mp3LyricsWin(tk.Tk):
             ) -> None:
         if not self._loadingLrc.future.cancelled():
             self.after(
-                self._TIME_OPERATIONS,
+                self._TIME_AFTER,
                 self._LoadLrc_cancel_after,
                 mp3_file)
         else:
@@ -946,9 +931,9 @@ class Mp3LyricsWin(tk.Tk):
                 self._LoadLrc(mp3_file)
     
     def _ChangeVolume(self, value: str) -> None:
-        PygameMusic.set_volume(float(value) / 10)
+        music.set_volume(float(value) / 10)
     
-    def _PlayPause(self) -> None:
+    def _PlayPauseMp3(self) -> None:
         # Checking if the MP3 is palying or not...
         self._isPlaying = not self._isPlaying
         if self._isPlaying:
@@ -956,22 +941,22 @@ class Mp3LyricsWin(tk.Tk):
             self._btn_palyPause['image'] = self._IMG_PAUSE
             pos = round(self._slider_playTime.get())
             self._slider_playTime.set(pos)
-            PygameMusic.set_endevent(self._MUSIC_END)
-            PygameMusic.play(start=pos)
+            music.set_endevent(self._MUSIC_END)
+            music.play(start=pos)
             # Updating play-time slider...
-            self._syncPTAfterID = self.after(
-                self._TIME_PLAYBACK,
-                self._SyncPTSlider,
+            self._playAfterID = self.after(
+                self._TIME_PLAY,
+                self._UpdatePlayTimeSlider,
                 pos)
         else:
             # The MP3 is not playing...
             self._btn_palyPause['image'] = self._IMG_PLAY
-            PygameMusic.pause()
-            self._StopSyncingPTSlider()
+            music.pause()
+            self._StopUpdatingPTSlider()
     
-    def _SyncPTSlider(self, start_offset: float) -> None:
+    def _UpdatePlayTimeSlider(self, start_offset: float) -> None:
         try:
-            self.pos = (PygameMusic.get_pos() / 1_000) + start_offset
+            self.pos = (music.get_pos() / 1_000) + start_offset
         except ValueError:
             logging.error(
                 f"There was a problem converting {self._pos}"
@@ -983,7 +968,7 @@ class Mp3LyricsWin(tk.Tk):
                 self._DecideAfterPlayed()
                 return
         # Looking for A-B repeat...
-        if self._abvw.IsSet() and (not self._abvw.IsInside(self._pos)):
+        if self._abvw.IsSet() and (not self._abvw.InInside(self._pos)):
             # The A-B repeat is set & slider is outside of it...
             self._MoveMp3To(self._abvw.a)
             start_offset = self._abvw.a
@@ -994,62 +979,50 @@ class Mp3LyricsWin(tk.Tk):
         # Highlighting the current lyrics...
         _, idx = self._timestamps.index(self._pos)
         self._lrcvw.Highlight(idx - 1)
-        self._syncPTAfterID = self.after(
-            self._TIME_PLAYBACK,
-            self._SyncPTSlider,
+        self._playAfterID = self.after(
+            self._TIME_PLAY,
+            self._UpdatePlayTimeSlider,
             start_offset)
     
-    def _KeepPTSliderAt(self, __pos: float, /) -> None:
-        """Keeps play-time slider at the specified position."""
-        self._slider_playTime.set(__pos)
-        self._keepPTAfterID = self.after(
-            self._TIME_PLAYBACK,
-            self._KeepPTSliderAt,
-            __pos)
-    
-    def _StopSyncingPTSlider(self) -> None:
-        """Stops updating play-time slider. That is it removes any schedule
-        of _SyncPTSlider method from Tkinter event loop and sets
-        _syncPTAfterID to None.
+    def _StopUpdatingPTSlider(self) -> None:
+        """Stops updating play-time slider. That is it removes
+        _UpdatePlayTimeSlider method from Tkinter event loop and sets
+        _playAfterID to None.
         """
-        self.after_cancel(self._syncPTAfterID)
-        del self._syncPTAfterID
-        self._syncPTAfterID = None
+        self.after_cancel(self._playAfterID)
+        del self._playAfterID
+        self._playAfterID = None
     
     def _MoveMp3To(self, __pos: float, /) -> None:
-        """Moves the play-time slider to the specified position
-        and also the playback of MP3 if playing."""
+        music.play(start=__pos)
         self._slider_playTime.set(__pos)
-        if self._isPlaying:
-            PygameMusic.play(start=__pos)
     
     def _DecideAfterPlayed(self) -> None:
         match self._afterPlayed.get():
             case int(AfterPlayed.STOP_PLAYING):
                 self._StopPlaying()
             case int(AfterPlayed.REPEAT):
+                '''music.rewind()
+                music.play()
+                self._slider_playTime.set(0)'''
                 self._MoveMp3To(0.0)
-                self._syncPTAfterID = self.after(
-                    self._TIME_PLAYBACK,
-                    self._SyncPTSlider,
+                self._playAfterID = self.after(
+                    self._TIME_PLAY,
+                    self._UpdatePlayTimeSlider,
                     0.0)
             case int(AfterPlayed.PLAY_FOLDER):
-                PygameMusic.unload()
-                # Place code to play next MP3 in the folder...
                 pass
             case int(AfterPlayed.REPEAT_FOLDER):
-                PygameMusic.unload()
-                # Place code to play next MP3 in the folder...
                 pass
     
     def _StopPlaying(self) -> None:
         self._btn_palyPause['image'] = self._IMG_PLAY
         if self._isPlaying:
             self._isPlaying = False
-            PygameMusic.stop()
+            music.stop()
             self._slider_playTime.set(0.0)
             self._RemoveABRepeat()
-            self._StopSyncingPTSlider()
+            self._StopUpdatingPTSlider()
     
     def _GetMp3PosBySiderX(self, x: int) -> int:
         """Returns the offset of the MP3 by the X coordinate of the Play Time
@@ -1060,45 +1033,31 @@ class Mp3LyricsWin(tk.Tk):
             x * self._slider_playTime['to']
             / self._slider_playTime.winfo_width())
     
-    def _OnPTSliderDraged(self, event: tk.Event) -> None:
+    def _DragPlayTimeSlider(self, event: tk.Event) -> None:
         """Triggers when play-time slider dragged."""
-        # Defining a new position for play-time slider to stick to...
+        # Finding & rounding pos to the nearest second...
         pos = self._GetMp3PosBySiderX(event.x)
-        self.after_cancel(self._keepPTAfterID)
-        self._keepPTAfterID = self.after(
-            self._TIME_OPERATIONS,
-            self._KeepPTSliderAt,
-            pos)
-        # Updating the GUI & the playback...
-        self._MoveMp3To(pos)
-    
-    def _OnPTSliderPressed(self, event: tk.Event) -> None:
-        # Stoping syncing of play-time slider...
+        self._slider_playTime.set(pos)
         if self._isPlaying:
-            self._StopSyncingPTSlider()
-        # Sticking play-time slider at this position...
-        self._keepPTAfterID = self.after(
-            self._TIME_PLAYBACK,
-            self._KeepPTSliderAt,
-            self._GetMp3PosBySiderX(event.x))
-        # Detecting A-B repeat changes...
+            music.play(start=pos)
+    
+    def _OnPlayTimeSliderPressed(self, event: tk.Event) -> None:
+        if self._isPlaying:
+            self._StopUpdatingPTSlider()
+        self._DragPlayTimeSlider(event)
         if event.state & Modifiers.CONTROL == Modifiers.CONTROL:
             self._abvw.a = self._GetMp3PosBySiderX(event.x)
         elif event.state & Modifiers.ALT == Modifiers.ALT:
             self._abvw.b = self._GetMp3PosBySiderX(event.x)
     
-    def _OnPTSliderRelease(self, event: tk.Event) -> None:
-        # Removing _KeepPTSliderAt schedule from Tkinter event loop...
-        self.after_cancel(self._keepPTAfterID)
-        del self._keepPTAfterID
-        self._keepPTAfterID = None
-        # Updating the GUI & the playback...
+    def _OnPlayTimeSliderRelease(self, event: tk.Event) -> None:
+        # Finding & rounding pos to the nearest second...
         pos = self._GetMp3PosBySiderX(event.x)
-        self._MoveMp3To(pos)
+        self._slider_playTime.set(pos)
         if self._isPlaying:
-            self._syncPTAfterID = self.after(
-                self._TIME_PLAYBACK,
-                self._SyncPTSlider,
+            self._playAfterID = self.after(
+                self._TIME_PLAY,
+                self._UpdatePlayTimeSlider,
                 pos)
     
     def _ReadSettings(self) -> None:
@@ -1120,9 +1079,9 @@ class Mp3LyricsWin(tk.Tk):
 
     def _OnClosingWin(self) -> None:
         # Unloading the MP3 file...
-        PygameMusic.unload()
+        music.unload()
         # Uninitializing the 'pygame.mixer' module...
-        PygameQuit()
+        quit()
 
         if self._lrc and self._lrc.changed:
             toSave = askyesno(message='Do you want to save the LRC?')

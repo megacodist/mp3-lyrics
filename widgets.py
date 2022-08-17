@@ -967,7 +967,7 @@ class LyricsEditor(Sheet):
                     rowIdx += 1
             except IndexError:
                 # Checking whether clipboard exhausted...
-                if lineIdx >= len(data):
+                if lineIdx >= len(clipLines):
                     # clipboard exhausted, we've done, returning...
                     return
                 # The sheet exhausted, appending the rest of clipboard...
@@ -1016,9 +1016,10 @@ class ABView(tk.Canvas):
     
     @a.setter
     def a(self, __a, /) -> None:
-        if not isinstance(__a, float):
+        if not isinstance(__a, (float, int,)):
             raise TypeError(
-                "The A component of a A-B repeat object must be a float")
+                "The A component of a A-B repeat object must be "
+                + "a float or an integer")
         if not (0.0 <= __a <= self._length):
             raise ValueError(
                 "Out of range value for the A "
@@ -1035,9 +1036,10 @@ class ABView(tk.Canvas):
     
     @a.setter
     def b(self, __b, /) -> None:
-        if not isinstance(__b, float):
+        if not isinstance(__b, (float, int,)):
             raise TypeError(
-                "The B component of a A-B repeat object must be a float")
+                "The B component of a A-B repeat object must be "
+                + "a float or an integer")
         if not (0.0 <= __b <= self._length):
             raise ValueError(
                 "Out of range value for the B "
@@ -1079,7 +1081,7 @@ class ABView(tk.Canvas):
         """Specifies whether this A-B repeat object is set or not."""
         return self._length > 0.0 and ((self._b - self._a) > 0.0)
     
-    def InInside(self, __value: float, /) -> bool:
+    def IsInside(self, __value: float, /) -> bool:
         """Specifies whether the A-B interval is set and the provided
         value is inside the interval.
         """
