@@ -7,6 +7,8 @@ from tkinter import PhotoImage, ttk
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import askyesno
 
+from megacodist.collections import SortedList
+from megacodist.keyboard import Modifiers, KeyCodes
 from mutagen.mp3 import MP3, HeaderNotFoundError
 import PIL.Image
 import PIL.ImageTk
@@ -16,11 +18,9 @@ import pygame.event
 from pygame.mixer import music  as PygameMusic
 from pygame.mixer import quit as PygameQuit
 
-from app_utils import AppSettings
+from app_utils import AppSettings, AbstractPlayer
 from asyncio_thrd import AsyncioThrd
 from lrc import Lrc, Timestamp
-from megacodist.keyboard import Modifiers, KeyCodes
-from sorted_list import SortedList
 from widgets import ABView, InfoView, MessageType, MessageView, LyricsView
 from widgets import LyricsEditor, WaitFrame, FolderView
 from win_utils import LoadingFolderAfterInfo, LoadingLrcAfterInfo
@@ -32,6 +32,7 @@ class Mp3LyricsWin(tk.Tk):
             self,
             res_dir: str | Path,
             asyncio_thrd: AsyncioThrd,
+            playrClass: type,
             screenName: str | None = None,
             baseName: str | None = None,
             className: str = 'Tk',
@@ -49,6 +50,10 @@ class Mp3LyricsWin(tk.Tk):
             + f"+{settings['MLW_X']}+{settings['MLW_Y']}")
         self.state(settings['MLW_STATE'])
 
+        self._PlayerClass: type = playrClass
+        """Specifies a class to instantiate audio playback
+        functionalities.
+        """
         self._isPlaying: bool = False
         """Specifies whether the MP3 is playing or not."""
         self._TIME_OPERATIONS = 40
@@ -102,11 +107,15 @@ class Mp3LyricsWin(tk.Tk):
         self._timestamps: SortedList[float] = []
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
+        self._HIMG_PLAY: PIL.Image.Image
         self._IMG_PAUSE: PIL.ImageTk.PhotoImage
+        self._HIMG_PAUSE: PIL.Image.Image
         self._IMG_VOLUME: PIL.ImageTk.PhotoImage
+        self._HIMG_VOLUME: PIL.Image.Image
         self._IMG_MP3: PIL.ImageTk.PhotoImage
-        self._IMG_LRC: PIL.ImageTk.PhotoImage
+        self._HIMG_MP3: PIL.Image.Image
         self._GIF_WAIT: list[PIL.ImageTk.PhotoImage]
+        self._HGIF_WAIT: PIL.Image.Image
 
         self._LoadRes()
         self._InitGui()
@@ -143,45 +152,39 @@ class Mp3LyricsWin(tk.Tk):
     
     def _LoadRes(self) -> None:
         # Loading 'volume.png'...
-        self._IMG_VOLUME = self._RES_DIR / 'volume.png'
-        self._IMG_VOLUME = PIL.Image.open(self._IMG_VOLUME)
-        self._IMG_VOLUME = self._IMG_VOLUME.resize(size=(24, 24,))
-        self._IMG_VOLUME = PIL.ImageTk.PhotoImage(image=self._IMG_VOLUME)
+        self._HIMG_VOLUME = self._RES_DIR / 'volume.png'
+        self._HIMG_VOLUME = PIL.Image.open(self._HIMG_VOLUME)
+        self._HIMG_VOLUME = self._HIMG_VOLUME.resize(size=(24, 24,))
+        self._IMG_VOLUME = PIL.ImageTk.PhotoImage(image=self._HIMG_VOLUME)
 
         # Loading 'play.png'...
-        self._IMG_PLAY = self._RES_DIR / 'play.png'
-        self._IMG_PLAY = PIL.Image.open(self._IMG_PLAY)
-        self._IMG_PLAY = self._IMG_PLAY.resize(size=(24, 24,))
-        self._IMG_PLAY = PIL.ImageTk.PhotoImage(image=self._IMG_PLAY)
+        self._HIMG_PLAY = self._RES_DIR / 'play.png'
+        self._HIMG_PLAY = PIL.Image.open(self._HIMG_PLAY)
+        self._HIMG_PLAY = self._HIMG_PLAY.resize(size=(24, 24,))
+        self._IMG_PLAY = PIL.ImageTk.PhotoImage(image=self._HIMG_PLAY)
 
         # Loading 'pause.png'...
-        self._IMG_PAUSE = self._RES_DIR / 'pause.png'
-        self._IMG_PAUSE = PIL.Image.open(self._IMG_PAUSE)
-        self._IMG_PAUSE = self._IMG_PAUSE.resize(size=(24, 24,))
-        self._IMG_PAUSE = PIL.ImageTk.PhotoImage(image=self._IMG_PAUSE)
+        self._HIMG_PAUSE = self._RES_DIR / 'pause.png'
+        self._HIMG_PAUSE = PIL.Image.open(self._HIMG_PAUSE)
+        self._HIMG_PAUSE = self._HIMG_PAUSE.resize(size=(24, 24,))
+        self._IMG_PAUSE = PIL.ImageTk.PhotoImage(image=self._HIMG_PAUSE)
 
         # Loading 'mp3.png'...
-        self._IMG_MP3 = self._RES_DIR / 'mp3.png'
-        self._IMG_MP3 = PIL.Image.open(self._IMG_MP3)
-        self._IMG_MP3 = self._IMG_MP3.resize(size=(16, 16,))
-        self._IMG_MP3 = PIL.ImageTk.PhotoImage(image=self._IMG_MP3)
-
-        '''# Loading 'lyrics.png'...
-        self._IMG_LRC = self._RES_DIR / 'lyrics.png'
-        self._IMG_LRC = PIL.Image.open(self._IMG_LRC)
-        self._IMG_LRC = self._IMG_LRC.resize(size=(16, 16,))
-        self._IMG_LRC = PIL.ImageTk.PhotoImage(image=self._IMG_LRC)'''
+        self._HIMG_MP3 = self._RES_DIR / 'mp3.png'
+        self._HIMG_MP3 = PIL.Image.open(self._HIMG_MP3)
+        self._HIMG_MP3 = self._HIMG_MP3.resize(size=(16, 16,))
+        self._IMG_MP3 = PIL.ImageTk.PhotoImage(image=self._HIMG_MP3)
 
         # Loading 'wait.gif...
-        gifFile = self._RES_DIR / 'wait.gif'
-        gifFile = PIL.Image.open(gifFile)
+        self._HGIF_WAIT = self._RES_DIR / 'wait.gif'
+        self._HGIF_WAIT = PIL.Image.open(self._HGIF_WAIT)
         self._GIF_WAIT: list[PhotoImage] = []
         idx = 0
         while True:
             try:
-                gifFile.seek(idx)
+                self._HGIF_WAIT.seek(idx)
                 self._GIF_WAIT.append(
-                    PIL.ImageTk.PhotoImage(image=gifFile))
+                    PIL.ImageTk.PhotoImage(image=self._HGIF_WAIT))
                 idx += 1
             except EOFError :
                 break
@@ -776,7 +779,11 @@ class Mp3LyricsWin(tk.Tk):
         timestamp = Timestamp.FromFloat(__leng, ndigits=self._ndigits)
         self._lbl_lengthMin['text'] = str(timestamp.minutes)
         self._lbl_lengthSec['text'] = str(timestamp.seconds)
-        self._lbl_lengthMilli['text'] = str(timestamp.milliseconds)[2:]
+        # Ensuring that milisecond part has two digits...
+        length = str(timestamp.milliseconds)[2:]
+        if len(length) == 1:
+            length += '0'
+        self._lbl_lengthMilli['text'] = length
     
     def _OpenMp3(self) -> None:
         if self._lastFile:
@@ -895,9 +902,9 @@ class Mp3LyricsWin(tk.Tk):
             self._lrc = None
             self._loadingLrc.CloseWaitFrames()
             try:
+                self._lrcLoaded = True
                 self._lrc = self._loadingLrc.future.result()
                 self._lrc.toSaveNoTimestamps = True
-                self._lrcLoaded = True
             except FileNotFoundError: 
                 self._msgvw.AddMessage(
                     title='No LRC',
@@ -1161,8 +1168,14 @@ class Mp3LyricsWin(tk.Tk):
         settings['MLW_AFTER_PLAYED'] = self._afterPlayed.get()
         settings['MLW_INFO_EVENTS_WIDTH'] = self._pwin_info.sashpos(0)
         settings['MLW_LRC_VIEW_WIDTH'] = self._pwin_player.sashpos(0)
-
+        # Saving settings...
         AppSettings().Update(settings)
+        # Closing images...
+        self._HIMG_VOLUME.close()
+        self._HIMG_MP3.close()
+        self._HIMG_PAUSE.close()
+        self._HIMG_PLAY.close()
+
         self.destroy()
     
     def _RemoveABRepeat(self) -> None:

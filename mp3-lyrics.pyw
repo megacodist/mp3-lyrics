@@ -2,7 +2,9 @@ from pathlib import Path
 
 from asyncio_thrd import AsyncioThrd
 from mp3_lyrics_win import Mp3LyricsWin
-from app_utils import ConfigureLogging, AppSettings, SetUnsupFile
+from app_utils import AbstractPlayer, AppSettings
+from app_utils import ConfigureLogging, SetUnsupFile
+import player
 
 
 # Definning global variables...
@@ -20,6 +22,16 @@ if __name__ == '__main__':
             pass
     SetUnsupFile(filename)
 
+    # Finding & loading the Player...
+    playerClass: type = None
+    for entity in dir(player):
+        entity = getattr(player, entity)
+        try:
+            if issubclass(entity, AbstractPlayer):
+                playerClass = entity
+        except TypeError:
+            pass
+
     # Loading application settings...
     filename = _MODULE_DIR / 'bin.bin'
     if not filename.exists():
@@ -34,7 +46,8 @@ if __name__ == '__main__':
     # running the application...
     mp3TagsWin = Mp3LyricsWin(
         res_dir=_MODULE_DIR / 'res',
-        asyncio_thrd=asyncioThrd)
+        asyncio_thrd=asyncioThrd,
+        playrClass=playerClass)
     mp3TagsWin.mainloop()
 
     # Finalizing...

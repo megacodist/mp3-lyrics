@@ -5,6 +5,7 @@ from tkinter import Frame, Misc, ttk
 from tkinter.font import nametofont, Font
 from typing import Any, Callable
 
+from megacodist.keyboard import Modifiers
 from PIL.ImageTk import PhotoImage
 from mutagen.mp3 import MP3
 from tkhtmlview import HTMLLabel
@@ -12,7 +13,6 @@ from tksheet import Sheet
 from tksheet._tksheet_other_classes import EditCellEvent
 
 from lrc import Lrc, LyricsItem, Timestamp
-from megacodist.keyboard import Modifiers
 
 
 class MessageType(IntEnum):
