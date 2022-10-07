@@ -1114,3 +1114,11 @@ Python interpreter: CPython 3.10.5
    ERROR: There was a problem converting -3.7030000000000003 to a <class 'type'> object
 
 
+[2022-10-07  11:03:12]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -1.0 to a <class 'type'> object
+
+
+[2022-10-07  11:05:05]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -1.0 to a <class 'type'> object
+
+

@@ -50,11 +50,11 @@ class PygamePlayer(AbstractPlayer):
         PygameMusic.set_volume(__volume / 100)
     
     @property
-    def pos(self) -> int:
-        return self._pos + PygameMusic.get_pos()
+    def pos(self) -> float:
+        return self._pos + (PygameMusic.get_pos() / 1_000)
 
     @pos.setter
-    def pos(self, __pos: int, /) -> int:
+    def pos(self, __pos: float, /) -> None:
         self._pos = __pos
         if self._playing:
             PygameMusic.play(start=self._pos)
@@ -79,11 +79,21 @@ class PygamePlayer(AbstractPlayer):
 
     def Stop(self) -> None:
         PygameMusic.stop()
+        self._pos = 0.0
+        self._playing = False
 
     def Close(self) -> None:
         PygameMusic.unload()
     
     def __del__(self) -> None:
+        # Releasing data structures...
+        del self._AUDIO_END_EVENT
+        del self._audioLocation
+        del self._playing
+        del self._pos
+        del self._volume
+
+        # Releasing Pygame resources if no object remained...
         PygamePlayer._nInstances -= 1
         if PygamePlayer._nInstances == 0:
             QuitPygame()

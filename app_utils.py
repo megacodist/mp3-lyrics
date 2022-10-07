@@ -43,12 +43,12 @@ class AbstractPlayer(ABC):
 
     @property
     @abstractmethod
-    def pos(self) -> int:
+    def pos(self) -> float:
         pass
     
     @pos.setter
     @abstractmethod
-    def pos(self, __pos: int, /) -> None:
+    def pos(self, __pos: float, /) -> None:
         pass
 
     @property
