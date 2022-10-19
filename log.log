@@ -1122,3 +1122,421 @@ Python interpreter: CPython 3.10.5
    ERROR: There was a problem converting -1.0 to a <class 'type'> object
 
 
+[2022-10-14  18:53:00]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-27' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=RuntimeError('read() called while another coroutine is already waiting for incoming data')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 128, in _read_stderr
+    async for line in readlines(self._process.stderr):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\utils.py", line 50, in readlines
+    data.extend(await stream.read(1024))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\streams.py", line 669, in read
+    await self._wait_for_data('read')
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\streams.py", line 488, in _wait_for_data
+    raise RuntimeError(
+RuntimeError: read() called while another coroutine is already waiting for incoming data
+[2022-10-14  18:53:00]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-21' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=RuntimeError('read() called while another coroutine is already waiting for incoming data')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 128, in _read_stderr
+    async for line in readlines(self._process.stderr):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\utils.py", line 50, in readlines
+    data.extend(await stream.read(1024))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\streams.py", line 669, in read
+    await self._wait_for_data('read')
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\streams.py", line 488, in _wait_for_data
+    raise RuntimeError(
+RuntimeError: read() called while another coroutine is already waiting for incoming data
+[2022-10-14  18:55:21]  base_events  MainThread
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-8' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 65, in _OnFFmpegStderr
+    firstSpace = line.index(' ')
+ValueError: substring not found
+[2022-10-14  18:55:21]  base_events  MainThread
+   ERROR: Task was destroyed but it is pending!
+task: <Task pending name='Task-9' coro=<Process.wait() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\subprocess.py:132> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_wait.<locals>._on_completion() at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\tasks.py:475]>
+
+
+[2022-10-14  18:55:21]  base_events  MainThread
+   ERROR: Task was destroyed but it is pending!
+task: <Task pending name='Task-3' coro=<FFmpeg.execute() running at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:87> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\futures.py:391]>
+
+
+[2022-10-14  18:57:19]  base_events  MainThread
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-10' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 65, in _OnFFmpegStderr
+    firstSpace = line.index(' ')
+ValueError: substring not found
+[2022-10-14  18:57:19]  base_events  MainThread
+   ERROR: Task was destroyed but it is pending!
+task: <Task pending name='Task-11' coro=<Process.wait() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\subprocess.py:132> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_wait.<locals>._on_completion() at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\tasks.py:475]>
+
+
+[2022-10-14  18:57:19]  base_events  MainThread
+   ERROR: Task was destroyed but it is pending!
+task: <Task pending name='Task-3' coro=<FFmpeg.execute() running at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:87> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\futures.py:391]>
+
+
+[2022-10-14  19:02:39]  base_events  MainThread
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-10' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 65, in _OnFFmpegStderr
+    firstSpace = line.index(' ')
+ValueError: substring not found
+[2022-10-14  19:02:39]  base_events  MainThread
+   ERROR: Task was destroyed but it is pending!
+task: <Task pending name='Task-11' coro=<Process.wait() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\subprocess.py:132> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_wait.<locals>._on_completion() at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\tasks.py:475]>
+
+
+[2022-10-14  19:02:39]  base_events  MainThread
+   ERROR: Task was destroyed but it is pending!
+task: <Task pending name='Task-3' coro=<FFmpeg.execute() running at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:87> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\asyncio\futures.py:391]>
+
+
+[2022-10-14  19:05:41]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting nan to a <class 'type'> object
+
+
+[2022-10-14  19:06:21]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting nan to a <class 'type'> object
+
+
+[2022-10-14  19:08:46]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting nan to a <class 'type'> object
+
+
+[2022-10-14  19:28:16]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-6' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:29:55]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-6' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:30:17]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-14' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:34:17]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-6' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:38:58]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-6' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:39:38]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-14' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:41:06]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-14' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-14  19:44:20]  base_events  AsyncioThrd
+   ERROR: Task exception was never retrieved
+future: <Task finished name='Task-21' coro=<FFmpeg._read_stderr() done, defined at C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py:127> exception=ValueError('substring not found')>
+
+Traceback (most recent call last):
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\ffmpeg\ffmpeg.py", line 129, in _read_stderr
+    self.emit('stderr', line.decode('utf-8'))
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 176, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 154, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "C:\Users\Didaniha\AppData\Local\Programs\Python\Python310\lib\site-packages\pyee\base.py", line 130, in _emit_run
+    f(*args, **kwargs)
+  File "d:\Mohsen\Programming\Python\mp3-lyrics\player.py", line 68, in _OnFFmpegStderr
+    firstSpace = error.index(' ')
+ValueError: substring not found
+[2022-10-19  17:01:00]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting nan to a <class 'type'> object
+
+
+[2022-10-19  17:06:15]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting nan to a <class 'type'> object
+
+
+[2022-10-19  17:15:43]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting nan to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:24:11]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -50 to a <class 'type'> object
+
+
+[2022-10-19  18:25:16]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+
+[2022-10-19  18:35:58]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+
+[2022-10-19  18:43:24]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+
+[2022-10-19  18:47:00]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+
+[2022-10-19  19:09:08]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+
+[2022-10-19  19:33:56]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+
+[2022-10-19  20:03:10]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.02 to a <class 'type'> object
+
+
+[2022-10-19  20:10:24]  mp3_lyrics_win  MainThread
+   ERROR: There was a problem converting -0.01 to a <class 'type'> object
+
+

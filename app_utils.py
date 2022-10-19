@@ -34,6 +34,9 @@ class AbstractPlayer(ABC):
     @property
     @abstractmethod
     def volume(self) -> int:
+        """Gets or sets the volume ofthe audio as an integer in the
+        range of0 to 100.
+        """
         pass
     
     @volume.setter
@@ -44,6 +47,9 @@ class AbstractPlayer(ABC):
     @property
     @abstractmethod
     def pos(self) -> float:
+        """Gets or sets the position of the stream as seconds in the
+        form of a floating-point number.
+        """
         pass
     
     @pos.setter
@@ -71,6 +77,7 @@ class AbstractPlayer(ABC):
 
     @abstractmethod
     def Close(self) -> None:
+        """Releases resources associated with the player."""
         pass
 
 

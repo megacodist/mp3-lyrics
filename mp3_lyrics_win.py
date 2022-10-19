@@ -732,7 +732,7 @@ class Mp3LyricsWin(tk.Tk):
     @pos.setter
     def pos(self, __pos: float, /) -> None:
         self._pos = __pos
-        timestamp = Timestamp.FromFloat(__pos,ndigits=self._ndigits)
+        timestamp = Timestamp.FromFloat(__pos, ndigits=self._ndigits)
         self._lbl_posMin['text'] = str(timestamp.minutes)
         self._lbl_posSec['text'] = str(timestamp.seconds)
         self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
@@ -751,7 +751,9 @@ class Mp3LyricsWin(tk.Tk):
             self._UpdateGui_NotPlayable()
             if self._player:
                 self._player.Close()
-            self._player: AbstractPlayer = self._PlayerClass(mp3File)
+            self._player: AbstractPlayer = self._PlayerClass(
+                mp3File,
+                self._asyncThrd.loop)
             self._player.volume = self._slider_volume.get() * 10
             self._mp3 = MP3(mp3File)
             self._slider_playTime['to'] = self._mp3.info.length

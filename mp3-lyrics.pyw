@@ -22,14 +22,15 @@ if __name__ == '__main__':
             pass
     SetUnsupFile(filename)
 
-    # Finding & loading the Player...
+    # Finding & loading the implementation of Player...
     playerClass: type = None
     for entity in dir(player):
         entity = getattr(player, entity)
         try:
-            if issubclass(entity, AbstractPlayer):
+            if AbstractPlayer in entity.__bases__:
                 playerClass = entity
-        except TypeError:
+                break
+        except AttributeError:
             pass
 
     # Loading application settings...

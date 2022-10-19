@@ -1,31 +1,21 @@
+from asyncio import AbstractEventLoop
+from cmath import isnan
+from datetime import timedelta
 from pathlib import Path
-
-from pygame import init as InitPygame
-from pygame import quit as QuitPygame
-from pygame import USEREVENT as PYGAME_USER_EVENT
-from pygame.event import get as GetPygameEvents
-from pygame.mixer import music  as PygameMusic
+import subprocess
 
 from app_utils import AbstractPlayer
 
 
-class PygamePlayer(AbstractPlayer):
-    _nInstances = 0
-    """Counts number of instances ofthis class"""
-
+class FFmpegPlayer(AbstractPlayer):
+    """Implements a player for the program. This realization does not need
+    asyncio event loop.
+    """
     def __init__(
             self,
             audio: str | Path,
+            loop: AbstractEventLoop | None = None
             ) -> None:
-        # Initializing the object...
-        super().__init__(audio)
-        # Incrementing number of instances & Pygame...
-        PygamePlayer._nInstances += 1
-        if PygamePlayer._nInstances == 1:
-            InitPygame()
-        self._AUDIO_END_EVENT = PYGAME_USER_EVENT + 1
-        PygameMusic.set_endevent(self._AUDIO_END_EVENT)
-        PygameMusic.load(audio)
         # Initializing other attributes...
         self._audioLocation = audio
         """Specifies the location of the input audio either in the local
@@ -39,6 +29,8 @@ class PygamePlayer(AbstractPlayer):
         """
         self._playing = False
         """Specifies whether the audio is playing at the moment or not."""
+        self._popen: subprocess.Popen[str] | None = None
+        """Specifies the Popen object wrapping the child process."""
 
     @property
     def volume(self) -> int:
@@ -46,54 +38,70 @@ class PygamePlayer(AbstractPlayer):
 
     @volume.setter
     def volume(self, __volume: int, /) -> int:
-        self._volume = __volume
-        PygameMusic.set_volume(__volume / 100)
+        self._volume = round(__volume)
+        if self._playing:
+            self._popen.terminate()
+            self.Play()
     
     @property
     def pos(self) -> float:
-        return self._pos + (PygameMusic.get_pos() / 1_000)
+        while self._popen and (self._popen.poll() is None):
+            try:
+                sPos = self._popen.stdout.readline().strip()
+                spaceIdx = sPos.index(' ')
+                fPos = float(sPos[:spaceIdx])
+            except ValueError:
+                pass
+            else:
+                if not isnan(fPos):
+                    self._pos = fPos
+                    return fPos
+        self._playing = False
+        self._pos = 0.0
+        return 0.0
 
     @pos.setter
     def pos(self, __pos: float, /) -> None:
         self._pos = __pos
         if self._playing:
-            PygameMusic.play(start=self._pos)
+            self._popen.terminate()
+            self.Play()
 
     @property
     def playing(self) -> bool:
-        if self._playing == False:
-            return self._playing
-        for event in GetPygameEvents():
-            if event.type == self._AUDIO_END_EVENT:
-                self._playing = False
-                return self._playing
         return self._playing
 
     def Play(self) -> None:
-        if not self._playing:
-            self._playing = True
-            PygameMusic.play(start=self._pos)
+        args = [
+            'ffplay',
+            '-nodisp',
+            '-hide_banner',
+            '-autoexit',
+            '-i',
+            self._audioLocation,
+            '-volume',
+            str(self._volume),
+            '-ss',
+            str(timedelta(seconds=self._pos))]
+        self._popen = subprocess.Popen(
+            args,
+            universal_newlines=True,
+            encoding='utf-8',
+            bufsize=1,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        self._playing = True
 
     def Pause(self) -> None:
-        PygameMusic.pause()
+        _ = self.pos
+        self._popen.terminate()
+        self._playing = False
 
     def Stop(self) -> None:
-        PygameMusic.stop()
+        self._popen.terminate()
         self._pos = 0.0
         self._playing = False
 
     def Close(self) -> None:
-        PygameMusic.unload()
-    
-    def __del__(self) -> None:
-        # Releasing data structures...
-        del self._AUDIO_END_EVENT
-        del self._audioLocation
-        del self._playing
-        del self._pos
-        del self._volume
-
-        # Releasing Pygame resources if no object remained...
-        PygamePlayer._nInstances -= 1
-        if PygamePlayer._nInstances == 0:
-            QuitPygame()
+        self._popen.terminate()

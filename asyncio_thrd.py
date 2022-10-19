@@ -35,12 +35,12 @@ class AsyncioThrd(Thread):
         self.pool: ProcessPoolExecutor
     
     def run(self) -> None:
-        # Changing default event loop from Proactor to Selector on Windows
+        '''# Changing default event loop from Proactor to Selector on Windows
         # OS and Python 3.8+...
         if sys.platform.startswith('win'):
             if sys.version_info[:2] >= (3, 8,):
                 asyncio.set_event_loop_policy(
-                    asyncio.WindowsSelectorEventLoopPolicy())
+                    asyncio.WindowsSelectorEventLoopPolicy())'''
 
         while self._running:
             try:
