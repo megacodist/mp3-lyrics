@@ -1,15 +1,96 @@
+"""This module implements the basic functionalities of abstract_mp3_lib
+by the use of FFmpeg project. It is supposed that FFmpeg is installed
+on the machine and the directory is also added the path environment
+variable.
+"""
+
 from asyncio import AbstractEventLoop
-from cmath import isnan
 from datetime import timedelta
+from json import loads
+from math import isnan
 from pathlib import Path
 import subprocess
 
-from app_utils import AbstractPlayer
+from abstract_mp3_lib import AbstractMP3Info, AbstractMP3Player
 
 
-class FFmpegPlayer(AbstractPlayer):
-    """Implements a player for the program. This realization does not need
-    asyncio event loop.
+class FFmpegMP3Info(AbstractMP3Info):
+    """Implements AbstractMP3Info by using FFmpeg project."""
+    def __init__(self, filename: str | Path) -> None:
+        self._filename = filename
+        """Specifies the file system address of the MP3 file."""
+        # Getting information of the file & putting them into an object...
+        self._rawData: dict | None = None
+        """A JSON object (a dictionary) containing all raw multimedia
+        attributes about the file.
+        """
+        args = [
+            'ffprobe',
+            '-hide_banner',
+            '-loglevel',
+            '0',
+            '-print_format',
+            'json',
+            '-show_format',
+            '-show_streams',
+            filename]
+        popen = subprocess.Popen(
+            args=args,
+            universal_newlines=True,
+            encoding='utf-8',
+            bufsize=1,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        jsonData = ''
+        while True:
+            output = popen.stdout.readline()
+            if output:
+                jsonData += output
+            elif popen.poll() is not None:
+                break
+        self._rawData = loads(jsonData)
+        self._rawData['format']['duration'] = float(
+            self._rawData['format']['duration'])
+        self._rawData['format']['bit_rate'] = int(
+            self._rawData['format']['bit_rate'])
+    
+    @property
+    def Duration(self) -> float:
+        return self._rawData['format']['duration']
+    
+    @property
+    def Filename(self) -> str | Path:
+        return self._filename
+
+    @property
+    def BitRate(self) -> int:
+        return self._rawData['format']['bit_rate']
+
+    @property
+    def FormatName(self) -> str:
+        return self._rawData['format']['format_name']
+
+    @property
+    def FormatLongName(self) -> str:
+        return self._rawData['format']['format_long_name']
+
+    @property
+    def Encoder(self) -> str:
+        return self._rawData['streams'][0]['tags']['encoder']
+    
+    @property
+    def Tags(self) -> dict[str, str]:
+        return self._rawData['format'].get('tags', {})
+    
+    @property
+    def RawData(self) -> dict:
+        return self._rawData
+
+
+class FFmpegMP3Player(AbstractMP3Player):
+    """Implements AbstractMP3Player by the use of FFmpeg project.
+    This realization does not need the asyncio event loop.
     """
     def __init__(
             self,

@@ -8,7 +8,6 @@ from typing import Any, Callable
 from megacodist.keyboard import Modifiers
 from PIL.ImageTk import PhotoImage
 from mutagen.mp3 import MP3
-from tkhtmlview import HTMLLabel
 from tksheet import Sheet
 from tksheet._tksheet_other_classes import EditCellEvent
 
@@ -509,7 +508,7 @@ class MessageView(Frame):
             self._font = nametofont('TkDefaultFont')
 
         self._mouseInside: bool = False
-        self._msgs: list[HTMLLabel] = []
+        self._msgs: list[tk.Message] = []
         self.max_events = max_events
         self._padx = padx
         self._pady = pady

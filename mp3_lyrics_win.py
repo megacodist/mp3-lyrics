@@ -581,20 +581,20 @@ class Mp3LyricsWin(tk.Tk):
             menu=self._menu_player)
         self._menu_player.add_command(
             label='Play/pause',
-            accelerator='P',
+            accelerator='Ctrl+P',
             command=self._PlayPause)
         self._menu_player.add_command(
             label='Stop',
-            accelerator='O',
+            accelerator='Ctrl+Q',
             command=self._StopPlaying)
         self._menu_player.add_separator()
         self._menu_player.add_command(
             label='Set A',
-            accelerator='A',
+            accelerator='Ctrl+A',
             command=self._SetA)
         self._menu_player.add_command(
             label='Set B',
-            accelerator='B',
+            accelerator='Ctrl+B',
             command=self._SetB)
         self._menu_player.add_command(
             label='Remove A-B',
@@ -706,6 +706,14 @@ class Mp3LyricsWin(tk.Tk):
             # Checking Ctrl+N...
             elif event.keycode == KeyCodes.N:
                 self._CreateLrc()
+            elif event.keycode == KeyCodes.P:
+                self._PlayPause()
+            elif event.keycode == KeyCodes.A:
+                self._SetA()
+            elif event.keycode == KeyCodes.B:
+                self._SetB()
+            elif event.keycode == KeyCodes.Q:
+                self._StopPlaying()
         # Checking Shift...
         elif (event.state & Modifiers.SHIFT) == Modifiers.SHIFT:
             if event.keycode == KeyCodes.DELETE:
@@ -716,14 +724,6 @@ class Mp3LyricsWin(tk.Tk):
                 self._lrcedt.ClearCells()
             elif event.keycode == KeyCodes.F5:
                 self._lrcedt.SetTimestamp(self._pos)
-            elif event.keycode == KeyCodes.P:
-                self._PlayPause()
-            elif event.keycode == KeyCodes.A:
-                self._SetA()
-            elif event.keycode == KeyCodes.B:
-                self._SetB()
-            elif event.keycode == KeyCodes.O:
-                self._StopPlaying()
     
     @property
     def pos(self) -> float:
@@ -759,6 +759,7 @@ class Mp3LyricsWin(tk.Tk):
             self._slider_playTime['to'] = self._mp3.info.length
             self._SetLength(self._mp3.info.length)
             self._abvw.length = self._mp3.info.length
+            self._abvw.b = self._abvw.length
             self.pos = 0
             self._lastFile = mp3File
             exceptionOccurred = False
@@ -1191,7 +1192,10 @@ class Mp3LyricsWin(tk.Tk):
             if self._lrc.changed:
                 self._lrc['by'] = 'https://twitter.com/megacodist'
                 self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
+                # Saving LRC to the dick...
                 self._lrc.Save()
+                # Updating GUI to reflect latest changes...
+                self._UpdateGui_Lrc()
     
     def _CreateLrc(self) -> None:
         if self._lrc:

@@ -5,7 +5,7 @@ accompany resource for some MP3 files.
 from __future__ import annotations
 from copy import deepcopy
 from enum import IntFlag
-from math import modf, trunc
+from math import modf
 from pathlib import Path
 import re
 from typing import overload
@@ -434,7 +434,7 @@ class Lrc:
         tagPattern = re.compile(TAG_REGEX)
 
         # Reading the content of the LRC file...
-        with open(self._filename, mode='rt') as lrcFile:
+        with open(self._filename, mode='rt', encoding='utf-8') as lrcFile:
             lines = lrcFile.readlines()
         
         nonTagMatched = False
@@ -573,7 +573,7 @@ class Lrc:
         there are, and hence removes their flags. Before calling this API,
         it is possible to change toSaveUnknownTags attribute.
         """
-        with open(self._filename, mode='wt') as lrcFile:
+        with open(self._filename, mode='wt', encoding='utf-8') as lrcFile:
             # Writing tags to the file...
             for tag, value in self._tags.items():
                 if isinstance(value, str):
