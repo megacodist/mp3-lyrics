@@ -1,6 +1,6 @@
-"""This module defines (not implementing) common MP3-related
-functionalities such as information about an MP3 file, playing, and also
-basic editing.
+"""This module defines an interface (not implementing) common
+MP3-related functionalities such as metadata about an MP3 file,
+playing the file, and also some basic editing capabilities.
 """
 
 
@@ -48,7 +48,7 @@ class AbstractMP3Info(ABC):
     @property
     @abstractmethod
     def Encoder(self) -> str:
-        """Gets the encoder of the MP3 file."""
+        """Gets the encoder of the MP3 file or None if it does not have."""
         pass
 
     @property

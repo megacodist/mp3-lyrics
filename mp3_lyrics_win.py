@@ -9,16 +9,12 @@ from tkinter.messagebox import askyesno
 
 from megacodist.collections import SortedList
 from megacodist.keyboard import Modifiers, KeyCodes
-from mutagen.mp3 import MP3, HeaderNotFoundError
 import PIL.Image
 import PIL.ImageTk
-'''import pygame
-from pygame import init, USEREVENT
-import pygame.event
-from pygame.mixer import music  as PygameMusic
-from pygame.mixer import quit as PygameQuit'''
 
-from app_utils import AppSettings, AbstractPlayer
+from abstract_mp3_lib import AbstractMP3Info, AbstractMP3Player
+from abstract_mp3_lib import AbstractMP3Editor
+from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
 from lrc import Lrc, Timestamp
 from widgets import ABView, InfoView, MessageType, MessageView, LyricsView
@@ -32,7 +28,9 @@ class Mp3LyricsWin(tk.Tk):
             self,
             res_dir: str | Path,
             asyncio_thrd: AsyncioThrd,
-            playrClass: type,
+            mp3InfoClass: type,
+            mp3PlayrClass: type,
+            mp3EditorClass: type,
             screenName: str | None = None,
             baseName: str | None = None,
             className: str = 'Tk',
@@ -50,14 +48,38 @@ class Mp3LyricsWin(tk.Tk):
             + f"+{settings['MLW_X']}+{settings['MLW_Y']}")
         self.state(settings['MLW_STATE'])
 
-        self._PlayerClass: type = playrClass
-        """Specifies a class to instantiate audio playback
+        self._MP3InfoClass: type = mp3InfoClass
+        """Specifies a class to instantiate objects bound to MP3
+        metadata functionality.
+        """
+        self._mp3Info: AbstractMP3Info | None = None
+        """Specifies the info object to perform metadata-related
         functionalities.
         """
-        self._player: AbstractPlayer | None = None
-        """Specifies the player to perform audio-related
-        playback functionalities.
+        self._MP3PlayerClass: type = mp3PlayrClass
+        """Specifies a class to instantiate objects bound to MP3
+        playback functionality.
         """
+        self._mp3Player: AbstractMP3Player | None = None
+        """Specifies the player to perform playback-related
+        functionalities.
+        """
+        self._MP3EditorClass: type = mp3EditorClass
+        """Specifies a class to instantiate objects bound to MP3
+        editing functionality.
+        """
+        self._mp3Editor: AbstractMP3Editor | None = None
+        """Specifies the editor to perform editing-related
+        functionalities.
+        """
+
+        self._RES_DIR = res_dir
+        """Specifies the resource folder of the application."""
+        self._asyncThrd = asyncio_thrd
+        """Specifies the asyncio thread capable of performing operations
+        related to this application.
+        """
+
         self._isPlaying: bool = False
         """Specifies whether the MP3 is playing or not."""
         self._TIME_OPERATIONS = 40
@@ -82,12 +104,6 @@ class Mp3LyricsWin(tk.Tk):
         """Specifies number of digits after decimal point that the
         position of the playback must be rounded to.
         """
-        self._RES_DIR = res_dir
-        """Specifies the resource folder of the application."""
-        self._asyncThrd = asyncio_thrd
-        """Specifies the asyncio thread capable of performing operations
-        related to this application.
-        """
         self._loadingFolder: LoadingFolderAfterInfo | None = None
         self._loadingLrc: LoadingLrcAfterInfo | None = None
 
@@ -104,8 +120,7 @@ class Mp3LyricsWin(tk.Tk):
         in conjuction with _lrc object can determine whether the LRC file
         exists or not.
         """
-        self._mp3: MP3 | None = None
-        """The mutagen.mp3.MP3 object of the _lastFile file."""
+
         self._timestamps: SortedList[float] = []
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
@@ -132,7 +147,7 @@ class Mp3LyricsWin(tk.Tk):
             settings['MLW_LT_COL_WIDTH']])
         self._pwin_info.sashpos(0, settings['MLW_INFO_EVENTS_WIDTH'])
         self.update_idletasks()
-        self._pwin_player.sashpos(0, settings['MLW_LRC_VIEW_WIDTH'])
+        self._pwin_mp3Player.sashpos(0, settings['MLW_LRC_VIEW_WIDTH'])
 
         # Bindings...
         self.bind(
@@ -454,27 +469,27 @@ class Mp3LyricsWin(tk.Tk):
             expand=1)
         
         #
-        self._pwin_player = ttk.PanedWindow(
+        self._pwin_mp3Player = ttk.PanedWindow(
             master=self._notebook,
             orient=tk.HORIZONTAL)
         self._notebook.add(
-            self._pwin_player,
+            self._pwin_mp3Player,
             text='Player')
         
         #
         self._lrcvw = LyricsView(
-            master=self._pwin_player,
+            master=self._pwin_mp3Player,
             width=200)
         self._lrcvw.pack(
             side=tk.LEFT,
             fill=tk.Y)
-        self._pwin_player.add(
+        self._pwin_mp3Player.add(
             self._lrcvw,
             weight=1)
         
         #
         self._frm_mp3s = ttk.Frame(
-            master=self._pwin_player)
+            master=self._pwin_mp3Player)
         self._frm_mp3s.columnconfigure(
             index=0,
             weight=1)
@@ -484,7 +499,7 @@ class Mp3LyricsWin(tk.Tk):
         self._frm_mp3s.pack(
             side=tk.RIGHT,
             fill=tk.Y)
-        self._pwin_player.add(
+        self._pwin_mp3Player.add(
             self._frm_mp3s,
             weight=1)
         
@@ -573,34 +588,34 @@ class Mp3LyricsWin(tk.Tk):
             variable=self._afterPlayed)
         
         # Creating 'Player' menu...
-        self._menu_player = tk.Menu(
+        self._menu_mp3Player = tk.Menu(
             master=self._menubar,
             tearoff=0)
         self._menubar.add_cascade(
             label='Player',
-            menu=self._menu_player)
-        self._menu_player.add_command(
+            menu=self._menu_mp3Player)
+        self._menu_mp3Player.add_command(
             label='Play/pause',
             accelerator='Ctrl+P',
             command=self._PlayPause)
-        self._menu_player.add_command(
+        self._menu_mp3Player.add_command(
             label='Stop',
             accelerator='Ctrl+Q',
             command=self._StopPlaying)
-        self._menu_player.add_separator()
-        self._menu_player.add_command(
+        self._menu_mp3Player.add_separator()
+        self._menu_mp3Player.add_command(
             label='Set A',
             accelerator='Ctrl+A',
             command=self._SetA)
-        self._menu_player.add_command(
+        self._menu_mp3Player.add_command(
             label='Set B',
             accelerator='Ctrl+B',
             command=self._SetB)
-        self._menu_player.add_command(
+        self._menu_mp3Player.add_command(
             label='Remove A-B',
             command=self._RemoveABRepeat)
-        self._menu_player.add_separator()
-        self._menu_player.add_cascade(
+        self._menu_mp3Player.add_separator()
+        self._menu_mp3Player.add_cascade(
             label='After played',
             menu=self._menu_afterPlayed)
 
@@ -657,6 +672,8 @@ class Mp3LyricsWin(tk.Tk):
             label='Insert from clipboard',
             accelerator='Ctrl+I',
             command=self._lrcedt.InsertFromClipboard)
+        
+        self.update_idletasks()
     
     def _OnKeyPressed(self, event: tk.Event) -> None:
         altCtrlShift = (
@@ -736,11 +753,6 @@ class Mp3LyricsWin(tk.Tk):
         self._lbl_posMin['text'] = str(timestamp.minutes)
         self._lbl_posSec['text'] = str(timestamp.seconds)
         self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
-
-    '''def _InitPygame(self) -> None:
-        # Initializing the 'pygame.mixer' module...
-        init()
-        PygameMusic.set_volume(self._slider_volume.get() / 10)'''
     
     def _InitPlayer(self, mp3File: str) -> None:
         # Definition of variables...
@@ -749,30 +761,25 @@ class Mp3LyricsWin(tk.Tk):
         # Starting...
         try:
             self._UpdateGui_NotPlayable()
-            if self._player:
-                self._player.Close()
-            self._player: AbstractPlayer = self._PlayerClass(
+            if self._mp3Player:
+                self._mp3Player.Close()
+            self._mp3Info: AbstractMP3Info = self._MP3InfoClass(mp3File)
+            self._mp3Player: AbstractMP3Player = self._MP3PlayerClass(
                 mp3File,
                 self._asyncThrd.loop)
-            self._player.volume = self._slider_volume.get() * 10
-            self._mp3 = MP3(mp3File)
-            self._slider_playTime['to'] = self._mp3.info.length
-            self._SetLength(self._mp3.info.length)
-            self._abvw.length = self._mp3.info.length
+            self._mp3Player.volume = self._slider_volume.get() * 10
+            self._slider_playTime['to'] = self._mp3Info.Duration
+            self._SetLength(self._mp3Info.Duration)
+            self._abvw.length = self._mp3Info.Duration
             self._abvw.b = self._abvw.length
             self.pos = 0
             self._lastFile = mp3File
             exceptionOccurred = False
-        except HeaderNotFoundError:
+        except FileNotFoundError:
             self._msgvw.AddMessage(
-                title='MP3 metadata error',
-                message=f"Problem loading '{mp3File}'",
+                title='MP3 not found',
+                message=f"'{mp3File}' did not found.",
                 type=MessageType.ERROR)
-            '''except pygame.error as err:
-                self._msgvw.AddMessage(
-                    title='MP3 file error',
-                    message=f"{str(err)}",
-                    type=MessageType.ERROR)'''
         else:
             self.title(f'{Path(self._lastFile).name} - MP3 Lyrics')
             self._UpdateGui_Playable()
@@ -782,6 +789,7 @@ class Mp3LyricsWin(tk.Tk):
                 self.title('MP3 Lyrics')
     
     def _SetLength(self, __leng: float) -> None:
+        """Shows the length of the MP3 in the GUI."""
         timestamp = Timestamp.FromFloat(__leng, ndigits=self._ndigits)
         self._lbl_lengthMin['text'] = str(timestamp.minutes)
         self._lbl_lengthSec['text'] = str(timestamp.seconds)
@@ -959,8 +967,8 @@ class Mp3LyricsWin(tk.Tk):
                 self._LoadLrc(mp3_file)
     
     def _ChangeVolume(self, value: str) -> None:
-        if self._player:
-            self._player.volume = float(value) * 10
+        if self._mp3Player:
+            self._mp3Player.volume = float(value) * 10
     
     def _PlayPause(self) -> None:
         # Checking if the MP3 is palying or not...
@@ -970,8 +978,8 @@ class Mp3LyricsWin(tk.Tk):
             self._btn_palyPause['image'] = self._IMG_PAUSE
             pos = round(self._slider_playTime.get())
             self._slider_playTime.set(pos)
-            self._player.pos = pos
-            self._player.Play()
+            self._mp3Player.pos = pos
+            self._mp3Player.Play()
             # Updating play-time slider...
             self._syncPTAfterID = self.after(
                 self._TIME_PLAYBACK,
@@ -979,18 +987,18 @@ class Mp3LyricsWin(tk.Tk):
         else:
             # The MP3 is not playing...
             self._btn_palyPause['image'] = self._IMG_PLAY
-            self._player.Pause()
+            self._mp3Player.Pause()
             self._StopSyncingPTSlider()
     
     def _SyncPTSlider(self) -> None:
         try:
-            self.pos = self._player.pos
+            self.pos = self._mp3Player.pos
         except ValueError:
             logging.error(
                 f"There was a problem converting {self._pos}"
                 + f" to a {str(Timestamp.__class__)} object")
         # Checking whether the MP3 has finished or not...
-        if not self._player.playing:
+        if not self._mp3Player.playing:
             # The MP3 finished, deciding on the action...
             self._DecideAfterPlayed()
             return
@@ -1030,7 +1038,7 @@ class Mp3LyricsWin(tk.Tk):
         """Moves the play-time slider to the specified position
         and also the playback of MP3 if playing."""
         self._slider_playTime.set(__pos)
-        self._player.pos = __pos
+        self._mp3Player.pos = __pos
     
     def _DecideAfterPlayed(self) -> None:
         match self._afterPlayed.get():
@@ -1038,16 +1046,16 @@ class Mp3LyricsWin(tk.Tk):
                 self._StopPlaying()
             case int(AfterPlayed.REPEAT):
                 self._MoveMp3To(0.0)
-                self._player.Play()
+                self._mp3Player.Play()
                 self._syncPTAfterID = self.after(
                     self._TIME_PLAYBACK,
                     self._SyncPTSlider)
             case int(AfterPlayed.PLAY_FOLDER):
-                self._player.Close()
+                self._mp3Player.Close()
                 # Place code to play next MP3 in the folder...
                 pass
             case int(AfterPlayed.REPEAT_FOLDER):
-                self._player.Close()
+                self._mp3Player.Close()
                 # Place code to play next MP3 in the folder...
                 pass
     
@@ -1055,7 +1063,7 @@ class Mp3LyricsWin(tk.Tk):
         self._btn_palyPause['image'] = self._IMG_PLAY
         if self._isPlaying:
             self._isPlaying = False
-            self._player.Stop()
+            self._mp3Player.Stop()
             self._slider_playTime.set(0.0)
             self._RemoveABRepeat()
             self._StopSyncingPTSlider()
@@ -1128,7 +1136,8 @@ class Mp3LyricsWin(tk.Tk):
 
     def _OnClosingWin(self) -> None:
         # Closing the MP3 file...
-        self._player.Close()
+        if self._mp3Player:
+            self._mp3Player.Close()
 
         if self._lrc and self._lrc.changed:
             toSave = askyesno(message='Do you want to save the LRC?')
@@ -1166,7 +1175,7 @@ class Mp3LyricsWin(tk.Tk):
         settings['MLW_LT_COL_WIDTH'] = colsWidth[1]
         settings['MLW_AFTER_PLAYED'] = self._afterPlayed.get()
         settings['MLW_INFO_EVENTS_WIDTH'] = self._pwin_info.sashpos(0)
-        settings['MLW_LRC_VIEW_WIDTH'] = self._pwin_player.sashpos(0)
+        settings['MLW_LRC_VIEW_WIDTH'] = self._pwin_mp3Player.sashpos(0)
         # Saving settings...
         AppSettings().Update(settings)
         # Closing images...
@@ -1178,7 +1187,7 @@ class Mp3LyricsWin(tk.Tk):
         self.destroy()
     
     def _RemoveABRepeat(self) -> None:
-        self._abvw.length = self._mp3.info.length
+        self._abvw.length = self._mp3Info.Duration
     
     def _SetA(self) -> None:
         self._abvw.a = self.pos
@@ -1225,7 +1234,7 @@ class Mp3LyricsWin(tk.Tk):
 
     def _UpdateGui_Playable(self) -> None:
         self._btn_palyPause['state'] = tk.NORMAL
-        self._menu_player.entryconfigure(
+        self._menu_mp3Player.entryconfigure(
             'Play/pause',
             state=tk.NORMAL)
 
@@ -1234,7 +1243,7 @@ class Mp3LyricsWin(tk.Tk):
 
     def _UpdateGui_NotPlayable(self) -> None:
         self._btn_palyPause['state'] = tk.DISABLED
-        self._menu_player.entryconfigure(
+        self._menu_mp3Player.entryconfigure(
             'Play/pause',
             state=tk.DISABLED)
         self._SetLength(0)
@@ -1257,8 +1266,8 @@ class Mp3LyricsWin(tk.Tk):
         self._lrcedt.Populate(self._lrc)
 
         # Populating the InofView...
-        self._infovw.PopulateMp3(self._mp3)
-        self._infovw.PopulateLrc(self._lrc)
+        self._infovw.PopulateMp3Info(self._mp3Info)
+        self._infovw.PopulateLrcInfo(self._lrc)
 
         # Adding a message if necessary...
         if self._lrc and self._lrc.errors:

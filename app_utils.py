@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from asyncio import AbstractEventLoop
+
 import base64
 import hashlib
 import hmac
@@ -15,70 +14,6 @@ from megacodist.singleton import SingletonMeta
 
 # Defining of global variables...
 _UNSUP_FILE: Path
-
-
-class AbstractPlayer(ABC):
-    @abstractmethod
-    def __init__(
-            self,
-            audio: str | Path,
-            loop: AbstractEventLoop | None = None
-            ) -> None:
-        """Initializes the Player. Any realization must accept location
-        of the audio typically in the local file system. Although some
-        implementation might accept other locations such as in the cloud.
-        The implementation might be built on top of Async IO model.
-        """
-        pass
-    
-    @property
-    @abstractmethod
-    def volume(self) -> int:
-        """Gets or sets the volume ofthe audio as an integer in the
-        range of0 to 100.
-        """
-        pass
-    
-    @volume.setter
-    @abstractmethod
-    def volume(self, __volume: int, /) -> None:
-        pass
-
-    @property
-    @abstractmethod
-    def pos(self) -> float:
-        """Gets or sets the position of the stream as seconds in the
-        form of a floating-point number.
-        """
-        pass
-    
-    @pos.setter
-    @abstractmethod
-    def pos(self, __pos: float, /) -> None:
-        pass
-
-    @property
-    @abstractmethod
-    def playing(self) -> bool:
-        """Specifies whether the audio is playing at the moment or not."""
-        pass
-
-    @abstractmethod
-    def Play(self) -> None:
-        pass
-
-    @abstractmethod
-    def Pause(self) -> None:
-        pass
-
-    @abstractmethod
-    def Stop(self) -> None:
-        pass
-
-    @abstractmethod
-    def Close(self) -> None:
-        """Releases resources associated with the player."""
-        pass
 
 
 class AppSettings(object, metaclass=SingletonMeta):

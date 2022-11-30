@@ -12,11 +12,21 @@ from pathlib import Path
 import subprocess
 
 from abstract_mp3_lib import AbstractMP3Info, AbstractMP3Player
+from abstract_mp3_lib import AbstractMP3Editor
 
 
 class FFmpegMP3Info(AbstractMP3Info):
     """Implements AbstractMP3Info by using FFmpeg project."""
     def __init__(self, filename: str | Path) -> None:
+        """Initializes new instance of this class fron 'filename' in
+        the file system.
+
+        Exceptions:
+        FileNotFoundError: the file has not found 
+        """
+        if not Path(filename).exists():
+            raise FileNotFoundError(f"'{filename}' has not found")
+
         self._filename = filename
         """Specifies the file system address of the MP3 file."""
         # Getting information of the file & putting them into an object...
@@ -77,7 +87,12 @@ class FFmpegMP3Info(AbstractMP3Info):
 
     @property
     def Encoder(self) -> str:
-        return self._rawData['streams'][0]['tags']['encoder']
+        for stream in self._rawData['streams']:
+            if stream['codec_name'] == 'mp3':
+                if 'tags' in stream:
+                    return stream['tags'].get('encoder', None)
+                else:
+                    break
     
     @property
     def Tags(self) -> dict[str, str]:
@@ -191,3 +206,7 @@ class FFmpegMP3Player(AbstractMP3Player):
             self._popen.terminate()
         except AttributeError:
             pass
+
+
+class FFmpegMP3Editor(AbstractMP3Editor):
+    pass
