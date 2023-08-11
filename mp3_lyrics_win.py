@@ -53,7 +53,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
             + f"+{settings['MLW_X']}+{settings['MLW_Y']}")
         self.state(settings['MLW_STATE'])
 
-        self._MP3Class: Type[AbstractMP3] = mp3Class
+        self._Mp3Class: Type[AbstractMP3] = mp3Class
         """Specifies a class to instantiate objects bound to MP3
         processing and functionalities.
         """
@@ -774,15 +774,14 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
     
     def _InitPlayer(self, mp3File: str) -> None:
-        # Definition of variables...
+        # Declaring variables -----------------------------
         exceptionOccurred: bool = True
-
-        # Starting...
+        # Starting ----------------------------------------
         try:
             self._UpdateGui_NotPlayable()
             if self._mp3:
                 self._mp3.Close()
-            self._mp3: AbstractMP3 = self._MP3Class(
+            self._mp3: AbstractMP3 = self._Mp3Class(
                 mp3File,
                 self._asyncThrd.loop)
             self._mp3.volume = self._slider_volume.get() * 10
@@ -1287,6 +1286,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         pass
 
     def _UpdateGui_NotPlayable(self) -> None:
+        """Updates GUI in a way that PLAY button is disables."""
         self._btn_palyPause['state'] = tk.DISABLED
         self._menu_mp3Player.entryconfigure(
             'Play/pause',

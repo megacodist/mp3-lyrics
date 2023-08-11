@@ -30,9 +30,9 @@ class AbstractMP3(ABC):
         implementations might accept other locations such as in the cloud.
         The implementation might be built on top of Async IO model.
 
-        Exceptions:
-        FileNotFoundError: the specified file does not exist.
-        MP3NotFoundError: the specified is not a valid MP3 file.
+        #### Exceptions:
+        * `FileNotFoundError`: the specified file does not exist.
+        * `MP3NotFoundError`: the specified is not a valid MP3 file.
         """
         pass
 
