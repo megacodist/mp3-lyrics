@@ -9,10 +9,31 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-class AbstractMP3Info(ABC):
+class MP3NotFoundError(Exception):
+    """Raised when the specified file is not an MP3."""
+    pass
+
+
+class AbstractMP3(ABC):
+    """This class consolidate all required functionalities to work with
+    MP3 files including properties, metadata, playbak, and also some
+    editing capabilities.
+    """
     @abstractmethod
-    def __init__(self, filename: str | Path) -> None:
-        """Initializes a new instance with the file system address."""
+    def __init__(
+            self,
+            filename: str | Path,
+            loop: AbstractEventLoop | None = None
+            ) -> None:
+        """Initializes the MP3 instance. Any realization must accept location
+        of the audio typically in the local file system. Although some
+        implementations might accept other locations such as in the cloud.
+        The implementation might be built on top of Async IO model.
+
+        Exceptions:
+        FileNotFoundError: the specified file does not exist.
+        MP3NotFoundError: the specified is not a valid MP3 file.
+        """
         pass
 
     @property
@@ -59,26 +80,18 @@ class AbstractMP3Info(ABC):
 
     @property
     @abstractmethod
+    def nStreams(self) -> int:
+        """Gets number of streams inside the MP3 or None if it
+        does not have.
+        """
+        pass
+
+    @property
+    @abstractmethod
     def RawData(self) -> dict:
         """Gets all data about the MP3 file as a JOSN object."""
         pass
 
-
-class AbstractMP3Player(ABC):
-    """This class offers an interface to play an MP3 file."""
-    @abstractmethod
-    def __init__(
-            self,
-            audio: str | Path,
-            loop: AbstractEventLoop | None = None
-            ) -> None:
-        """Initializes the Player. Any realization must accept location
-        of the audio typically in the local file system. Although some
-        implementations might accept other locations such as in the cloud.
-        The implementation might be built on top of Async IO model.
-        """
-        pass
-    
     @property
     @abstractmethod
     def volume(self) -> int:
@@ -117,17 +130,19 @@ class AbstractMP3Player(ABC):
 
     @abstractmethod
     def Pause(self) -> None:
+        """Pauses the playback of the stream. You can resume with 'Play'
+        method.
+        """
         pass
 
     @abstractmethod
     def Stop(self) -> None:
+        """Stops the playback of the stream and sets the position to the
+        start.
+        """
         pass
 
     @abstractmethod
     def Close(self) -> None:
         """Releases resources associated with the player."""
         pass
-
-
-class AbstractMP3Editor(ABC):
-    pass

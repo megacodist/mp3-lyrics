@@ -1,9 +1,16 @@
+from inspect import isabstract
+import logging
 from pathlib import Path
+import sys
+from typing import Type
 
-from abstract_mp3_lib import AbstractMP3Info, AbstractMP3Player
-from abstract_mp3_lib import AbstractMP3Editor
+from abstract_mp3 import AbstractMP3
 from asyncio_thrd import AsyncioThrd
-import mp3_lib
+try:
+    import mp3
+except ImportError:
+    sys.stderr.write("'mp3.py' has not been found")
+    sys.exit(1)
 from mp3_lyrics_win import Mp3LyricsWin
 from app_utils import AppSettings
 from app_utils import ConfigureLogging, SetUnsupFile
@@ -23,47 +30,22 @@ if __name__ == '__main__':
         with open(file=filename, mode='x') as fileobj:
             pass
     SetUnsupFile(filename)
-
-    '''# Finding & loading the implementation of Player...
-    playerClass: type = None
-    for entity in dir(player):
-        entity = getattr(player, entity)
-        try:
-            if AbstractPlayer in entity.__bases__:
-                playerClass = entity
-                break
-        except AttributeError:
-            pass'''
     
     # Finding & loading implementations of MP3 library...
-    mp3LibStuff = dir(mp3_lib)
-    # Looking for the MP3 info implementation...
+    mp3LibStuff = dir(mp3)
+    # Looking for the MP3 implementation...
+    mp3Class: Type[AbstractMP3] | None = None
     for item in mp3LibStuff:
-        item = getattr(mp3_lib, item)
-        try:
-            if AbstractMP3Info in item.__bases__:
-                mp3InfoClass = item
+        item = getattr(mp3, item)
+        if issubclass(item, AbstractMP3):
+            if not isabstract(item):
+                mp3Class = item
                 break
-        except AttributeError:
-            pass
-    # Looking for the MP3 player implementation...
-    for item in mp3LibStuff:
-        item = getattr(mp3_lib, item)
-        try:
-            if AbstractMP3Player in item.__bases__:
-                mp3PlayerClass = item
-                break
-        except AttributeError:
-            pass
-    # Looking for the MP3 editor implementation...
-    for item in mp3LibStuff:
-        item = getattr(mp3_lib, item)
-        try:
-            if AbstractMP3Editor in item.__bases__:
-                mp3EditorClass = item
-                break
-        except AttributeError:
-            pass
+    else:
+        msg_noAbsImpl = "Invalid 'mp3.py', no AbstractMP3 implementation"
+        sys.stderr.write(msg_noAbsImpl)
+        logging.critical(msg_noAbsImpl)
+        sys.exit(1)
 
     # Loading application settings...
     filename = _MODULE_DIR / 'bin.bin'
@@ -80,9 +62,7 @@ if __name__ == '__main__':
     mp3TagsWin = Mp3LyricsWin(
         res_dir=_MODULE_DIR / 'res',
         asyncio_thrd=asyncioThrd,
-        mp3InfoClass=mp3InfoClass,
-        mp3PlayrClass=mp3PlayerClass,
-        mp3EditorClass=mp3EditorClass)
+        mp3Class=mp3Class)
     mp3TagsWin.mainloop()
 
     # Finalizing...

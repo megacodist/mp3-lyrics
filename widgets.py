@@ -1,18 +1,18 @@
+import copy
 from datetime import timedelta
 from enum import IntEnum
 from pathlib import Path
 import tkinter as tk
 from tkinter import Frame, Misc, ttk
 from tkinter.font import nametofont, Font
-from typing import Any, Callable
+from typing import Callable, Mapping
 
 from megacodist.keyboard import Modifiers
 from PIL.ImageTk import PhotoImage
-from mutagen.mp3 import MP3
 from tksheet import Sheet
 from tksheet._tksheet_other_classes import EditCellEvent
 
-from abstract_mp3_lib import AbstractMP3Info
+from abstract_mp3 import AbstractMP3
 from lrc import Lrc, LyricsItem, Timestamp
 
 
@@ -131,6 +131,23 @@ class FolderView(ttk.Treeview):
                 self._toIgnoreNextSelect = False
             self._prevSelectedItem = selectedItemID
 
+
+class Mp3ListView(tk.Frame):
+    def __init__(
+                self,
+                master: tk.Tk,
+                select_callback: Callable[[str], None],
+                **kwargs
+                ) -> None:
+        from tkinterweb import HtmlFrame
+        super().__init__(master, **kwargs)
+        self._webvw = HtmlFrame(
+            self,
+            vertical_scrollbar=True,
+            horizontal_scrollbar=True,
+            messages_enabled=False)
+
+
 class WaitFrame(ttk.Frame):
     def __init__(
             self,
@@ -230,9 +247,10 @@ class LyricsView(ttk.Frame):
     def __init__(
             self,
             master: tk.Misc,
+            *,
             highlightable: bool = False,
             highlightColor: str = 'yellow',
-            sepWidth: int = 1,
+            sepLineWidth: int = 1,
             sepColor: str = 'thistle4',
             gap: int = 5,
             ipadx: int = 5,
@@ -249,13 +267,14 @@ class LyricsView(ttk.Frame):
         self._highlightable = highlightable
         self.highlightColor = highlightColor
         self._defaultColor: str
-        self._sepWidth = sepWidth
+        self._sepLineWidth = sepLineWidth
         self._sepColor = sepColor
         self._gap = gap
         self._ipadx = ipadx
         self._ipady = ipady
         self._width: int
         self._height: int
+        self._redrawRequested: bool = False
 
         self._vscrlbr: ttk.Scrollbar
         self._cnvs: tk.Canvas
@@ -265,7 +284,7 @@ class LyricsView(ttk.Frame):
 
         self._cnvs.bind(
             '<Configure>',
-            self._OnSizeChanged)
+            self._OnCnvsSizeChanged)
     
     def _InitGui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -297,27 +316,46 @@ class LyricsView(ttk.Frame):
 
         self._defaultColor = msg.cget('bg')
     
-    def _OnSizeChanged(self, event: tk.Event) -> None:
+    def _OnCnvsSizeChanged(self, event: tk.Event) -> None:
         try:
             if self._width != event.width or self._height != event.height:
                 self._width = event.width
                 self._height = event.height
-                self._Redraw()
+                for idx in range(len(self._lyrics)):
+                    self._msgs[idx]['width'] = event.width
+                if not self._redrawRequested:
+                    self._redrawRequested = True
+                    self._Redraw()
         except AttributeError:
             self._width = event.width
             self._height = event.height
+        '''width = (
+            event.width
+            - (int(self._cnvs['bd']) << 1)
+            - 4)
+        for msg in self._msgs:
+            msg['width'] = width
+        self._Redraw()'''
     
     @property
-    def sepWidth(self) -> int:
-        return self._sepWidth
+    def sepLineWidth(self) -> int:
+        """Gets or sets the width of line separator, which delimits
+        lyrics from each other.
+        """
+        return self._sepLineWidth
     
-    @sepWidth.setter
-    def sepWidth(self, __value: int) -> None:
-        pass
+    @sepLineWidth.setter
+    def sepLineWidth(self, __value: int) -> None:
+        if not isinstance(__value, int):
+            raise TypeError("'sepLineWidth' must be an integer")
+        if self._sepLineWidth != __value:
+            self._sepLineWidth = __value
+            self._Redraw()
 
     @property
     def lyrics(self) -> list[str]:
-        return self._lyrics
+        """Gets a copy of lyrics."""
+        return copy.deepcopy(self._lyrics)
     
     def Populate(
             self,
@@ -359,6 +397,12 @@ class LyricsView(ttk.Frame):
     def highlightable(self) -> bool:
         return self._highlightable
     
+    @highlightable.setter
+    def highlightable(self, __hlght: bool, /) -> None:
+        if self._highlightable != __hlght:
+            self._highlightable = __hlght
+            self._Redraw()
+    
     def Highlight(self, idx: int) -> None:
         if not self.highlightable:
             return
@@ -383,12 +427,14 @@ class LyricsView(ttk.Frame):
             self._idx = idx
 
     def _GetWidth(self) -> int:
+        """Gets the available width of canvas for drawing."""
         return (
             self._cnvs.winfo_width()
             - 4
             + (int(self._cnvs['bd']) << 1))
     
     def _GetHeight(self) -> int:
+        """Gets the available height of canvas for drawing."""
         return (
             self._cnvs.winfo_height()
             - 4
@@ -408,38 +454,53 @@ class LyricsView(ttk.Frame):
                     sticky=tk.NSEW)
 
         cnvsWidth = self._GetWidth()
-        cnvsMidWidth = cnvsWidth >> 1
+        cnvsHalfWidth = cnvsWidth >> 1
         cnvsHeight = self._GetHeight()
-        cnvsMidHeight = cnvsHeight >> 1
+        cnvsHalfHeight = cnvsHeight >> 1
 
-        nMsgs = len(self._msgs)
+        '''nMsgs = len(self._msgs)
         nLyrics = len(self._lyrics)
-        idx = nMsgs
-        while idx < nLyrics:
-            msg = tk.Message(
-                master=self._cnvs,
-                anchor=tk.NW,
-                justify=tk.CENTER,
-                width=cnvsWidth)
-            self._msgs.append(msg)
-            self._cnvs.create_window(0, 0, window=msg)
-            idx += 1
-        if nMsgs < nLyrics:
-            self._cnvs.update()
-        self._cnvs.delete('all')
+        try:
+            for idx in range(nLyrics):
+                #self._msgs[idx]['width'] = cnvsWidth
+                self._msgs[idx]['text'] = self._lyrics[idx]
+                self._cnvs.create_window(0, 0, width=cnvsWidth, window=self._msgs[idx])
+        except IndexError:
+            while idx < nLyrics:
+                msg = tk.Message(
+                    master=self._cnvs,
+                    anchor=tk.CENTER,
+                    justify=tk.CENTER,
+                    width=cnvsWidth)
+                #msg['width'] = cnvsWidth
+                msg['text'] = self._lyrics[idx]
+                self._msgs.append(msg)
+                self._cnvs.create_window(0, 0, width=cnvsWidth, window=msg)
+                idx += 1
 
+        if nMsgs < nLyrics:
+            self._cnvs.update()'''
+        nLyrics = len(self._lyrics)
+        self._cnvs.delete('all')
         if nLyrics <= 0:
             # No lyrics to show, returning after clearing the canvas...
             return
+        for idx in range(len(self._msgs), nLyrics):
+            msg = tk.Message(
+                master=self._cnvs,
+                anchor=tk.CENTER,
+                justify=tk.CENTER)
+            self._msgs.append(msg)
         
         # Drawing the first Message (lyric)...
-        y = cnvsMidHeight
-        self._msgs[0]['width'] = cnvsWidth
+        y = cnvsHalfHeight
+        #self._msgs[0]['width'] = cnvsWidth
         self._msgs[0]['text'] = self._lyrics[0]
         self._cnvs.create_window(
-            cnvsMidWidth,
+            cnvsHalfWidth,
             y,
             anchor=tk.N,
+            width=cnvsWidth,
             window=self._msgs[0])
         self._cnvs.update()
         y += self._msgs[0].winfo_height()
@@ -453,39 +514,41 @@ class LyricsView(ttk.Frame):
                 cnvsWidth,
                 y,
                 fill=self._sepColor,
-                width=self._sepWidth)
+                width=self._sepLineWidth)
 
-            y += (self._gap + self._sepWidth)
+            y += (self._gap + self._sepLineWidth)
             try:
-                self._heights[idx] = y - cnvsMidHeight
+                self._heights[idx] = y - cnvsHalfHeight
             except IndexError:
-                self._heights.append(y - cnvsMidHeight)
-            self._msgs[idx]['width'] = cnvsWidth
+                self._heights.append(y - cnvsHalfHeight)
+            #self._msgs[idx]['width'] = cnvsWidth
             self._msgs[idx]['text'] = self._lyrics[idx]
             self._cnvs.create_window(
-                cnvsMidWidth,
+                cnvsHalfWidth,
                 y,
                 anchor=tk.N,
+                width=cnvsWidth,
                 window=self._msgs[idx])
             self._cnvs.update()
             y += self._msgs[idx].winfo_height()
         
         # Setting the scroll region...
-        self._extraHeight = y + cnvsMidHeight
+        self._extraHeight = y + cnvsHalfHeight
         if self._highlightable:
             scrollRegion = (0, 0, cnvsWidth, self._extraHeight)
         else:
-            if (y - cnvsMidHeight) < cnvsHeight:
-                halfDiff = (cnvsHeight - y + cnvsMidHeight) >> 1
+            if (y - cnvsHalfHeight) < cnvsHeight:
+                halfDiff = (cnvsHeight - y + cnvsHalfHeight) >> 1
                 scrollRegion = (
                     0,
-                    cnvsMidHeight - halfDiff,
+                    cnvsHalfHeight - halfDiff,
                     cnvsWidth,
                     y + halfDiff)
             else:
-                scrollRegion = (0, cnvsMidHeight, cnvsWidth, y)
+                scrollRegion = (0, cnvsHalfHeight, cnvsWidth, y)
         self._cnvs['scrollregion'] = scrollRegion
         self._cnvs.yview_moveto(0)
+        self._redrawRequested = False
 
         
 class MessageView(Frame):
@@ -533,7 +596,7 @@ class MessageView(Frame):
             self._OnMouseWheel)
         self._cnvs.bind(
             '<Configure>',
-            self._OnSizeChanged)
+            self._OnCnvsSizeChanged)
     
     def _InitGui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -570,7 +633,7 @@ class MessageView(Frame):
                 int(-1 * (event.delta / 24)),
                 'units')
     
-    def _OnSizeChanged(self, event: tk.Event) -> None:
+    def _OnCnvsSizeChanged(self, event: tk.Event) -> None:
         width = (
             event.width
             - (int(self._cnvs['bd']) << 1)
@@ -611,25 +674,23 @@ class MessageView(Frame):
     def _Redraw(self) -> None:
         self._cnvs.delete('all')
         cnvsWidth = self._GetInternalWidth()
+        cnvsHalfWidth = cnvsWidth >> 1
         cnvsHeight = self._GetInternalHeight()
         y = self._pady
         if self._msgs:
-            x = self._padx + ((cnvsWidth - self._msgs[0].winfo_width()) >> 1)
             self._cnvs.create_window(
-                x,
+                cnvsHalfWidth,
                 y,
-                anchor=tk.NW,
+                anchor=tk.N,
                 window=self._msgs[0])
             y += self._msgs[0].winfo_height()
         idx = 1
         while idx < len(self._msgs):
-            x = self._padx + (
-                (cnvsWidth - self._msgs[idx].winfo_width()) >> 1)
             y += self._gap
             self._cnvs.create_window(
-                x,
+                cnvsHalfWidth,
                 y,
-                anchor=tk.NW,
+                anchor=tk.N,
                 window=self._msgs[idx])
             y += self._msgs[idx].winfo_height()
             idx += 1
@@ -660,7 +721,8 @@ class InfoView(ttk.Frame):
             **kwargs) -> None:
         super().__init__(master, **kwargs)
 
-        self._mp3Info: AbstractMP3Info | None = None
+        self._filename: str | Path | None = None
+        self._mp3: AbstractMP3 | None = None
         self._lrc: Lrc | None = None
 
         self._InitGui()
@@ -704,90 +766,136 @@ class InfoView(ttk.Frame):
         self._trvw.heading('#1', anchor=tk.W)
 
         #
-        self._trvw.insert(
+        self._iid_fileProp = self._trvw.insert(
             '',
-            index=0,
+            index='end',
             text='File properties',
             open=True)
-        self._trvw.insert(
+        self._iid_mp3Info = self._trvw.insert(
             '',
-            index=1,
+            index='end',
             text='MP3 information',
             open=True)
-        self._trvw.insert(
+        self._iid_mp3Tags = self._trvw.insert(
             '',
-            index=2,
+            index='end',
             text='MP3 tags',
             open=True)
-        self._trvw.insert(
+        self._iid_lrcErrors = self._trvw.insert(
             '',
-            index=3,
+            index='end',
             text='LRC errors',
             open=True)
+        self._iid_lrcTags = self._trvw.insert(
+            '',
+            index='end',
+            text='LRC tags',
+            open=True)
+        self._iids_streams: list[str] = []
     
-    def PopulateFileInfo(self) -> None:
-        pass
-
-    def PopulateMp3Info(self, __mp3Info: AbstractMP3Info, /) -> None:
+    def PopulateFileInfo(self, __filename: str | Path, /) -> None:
         # Saving the MP3Info object...
-        self._mp3Info = __mp3Info
+        self._filename = __filename
         # Clearing 'MP3 information' item...
-        mp3InfoIid = self._trvw.get_children('')[1]
-        for item in self._trvw.get_children(mp3InfoIid):
+        for item in self._trvw.get_children(self._iid_fileProp):
+            self._trvw.delete(item)
+
+    def PopulateMp3Info(self, __mp3Info: AbstractMP3, /) -> None:
+        # Saving the MP3Info object...
+        self._mp3 = __mp3Info
+        # Clearing 'MP3 information' item...
+        for item in self._trvw.get_children(self._iid_mp3Info):
             self._trvw.delete(item)
         # Adding MP3 infprmation...
-        if self._mp3Info.Duration is not None:
-            duration = timedelta(seconds=self._mp3Info.Duration)
+        if self._mp3.Duration is not None:
+            duration = timedelta(seconds=self._mp3.Duration)
             self._trvw.insert(
-                parent=mp3InfoIid,
+                parent=self._iid_mp3Info,
                 index='end',
                 text='Duration',
                 values=(duration,))
-        if self._mp3Info.BitRate is not None:
+        if self._mp3.BitRate is not None:
             self._trvw.insert(
-                parent=mp3InfoIid,
+                parent=self._iid_mp3Info,
                 index='end',
                 text='Bitrate',
-                values=(self._mp3Info.BitRate,))
-        if self._mp3Info.Encoder is not None:
+                values=(self._mp3.BitRate,))
+        if self._mp3.Encoder is not None:
             self._trvw.insert(
-                parent=mp3InfoIid,
+                parent=self._iid_mp3Info,
                 index='end',
                 text='Encoder',
-                values=(self._mp3Info.Encoder,))
+                values=(self._mp3.Encoder,))
         try:
-            if self._mp3Info.RawData['streams']:
+            if self._mp3.RawData['streams']:
                 self._trvw.insert(
-                    parent=mp3InfoIid,
+                    parent=self._iid_mp3Info,
                     index='end',
                     text='Number of streams',
-                    values=(len(self._mp3Info.RawData['streams']),))
+                    values=(self._mp3.nStreams,))
         except Exception:
             pass
         # Clearing 'MP3 tags' item...
-        mp3TagsIid = self._trvw.get_children('')[2]
-        for item in self._trvw.get_children(mp3TagsIid):
+        for item in self._trvw.get_children(self._iid_mp3Tags):
             self._trvw.delete(item)
         # Adding MP3 tags...
-        if self._mp3Info.Tags:
-            for tag, value in self._mp3Info.Tags.items():
+        if self._mp3.Tags:
+            for tag, value in self._mp3.Tags.items():
                 self._trvw.insert(
-                    parent=mp3TagsIid,
+                    parent=self._iid_mp3Tags,
                     index='end',
                     text=tag,
                     values=(value,))
+        # Adding streams...
+        self._trvw.delete(*self._iids_streams)
+        self._iids_streams.clear()
+        for stream in self._mp3.RawData['streams']:
+            iidStream = self._trvw.insert(
+                parent='',
+                index='end',
+                open=False,
+                text=('Stream #' + str(stream['index'])))
+            self._iids_streams.append(iidStream)
+            self._PopulateStream_Recursively(iidStream, stream)
+    
+    def _PopulateStream_Recursively(
+            self,
+            iid: str,
+            info: Mapping
+            ) -> None:
+        """Populates the the stream item in the treeview with 'iid' by
+        using 'info' json, recursively.
+        """
+        for key, value in info.items():
+            itemIid = self._trvw.insert(
+                parent=iid,
+                index='end',
+                text=key)
+            if isinstance(value, Mapping):
+                self._PopulateStream_Recursively(itemIid, value)
+            else:
+                self._trvw.item(itemIid, values=(value,))
 
     def PopulateLrcInfo(self, __lrc: Lrc, /) -> None:
-        self._lrc = __lrc
         # Clearing 'LRC error' item...
-        lrcError = self._trvw.get_children('')[3]
-        for item in self._trvw.get_children(lrcError):
+        for item in self._trvw.get_children(self._iid_lrcErrors):
             self._trvw.delete(item)
+        for item in self._trvw.get_children(self._iid_lrcTags):
+            self._trvw.delete(item)
+        self._lrc = __lrc
+        if not self._lrc:
+            return
         for error in self._lrc.errors:
             self._trvw.insert(
-                parent=lrcError,
+                parent=self._iid_lrcErrors,
                 index='end',
-                text=error)
+                text=error.name)
+        for tag, value in self._lrc.tags.items():
+            self._trvw.insert(
+                parent=self._iid_lrcTags,
+                index='end',
+                text=tag,
+                values=(value,))
 
 
 class InfoView_old(ttk.Frame):
@@ -805,7 +913,7 @@ class InfoView_old(ttk.Frame):
         self._sepLineWidth = sepLineWidth
         self._subitemIndent = subitemIndent
         self._lrc: Lrc | None = None
-        self._mp3Info: AbstractMP3Info | None = None
+        self._mp3: AbstractMP3 | None = None
 
         self._InitGui()
 
@@ -965,15 +1073,15 @@ class InfoView_old(ttk.Frame):
     def PopulateFile(self) -> None:
         pass
 
-    def PopulateMp3(self, __mp3Info: AbstractMP3Info, /) -> None:
-        self._mp3Info = __mp3Info
+    def PopulateMp3(self, __mp3: AbstractMP3, /) -> None:
+        self._mp3 = __mp3
         # Clearing previous infos...
         for widget in self._frm_mp3Info.winfo_children():
             widget.destroy()
         self._frm_mp3Info['width'] = self._cnvs.winfo_width()
         # Populating new MP3 infos...
         idx = 0
-        if self._mp3Info.Duration is not None:
+        if self._mp3.Duration is not None:
             msg = tk.Message(
                 self._frm_mp3Info,
                 text='Duration',
@@ -982,7 +1090,7 @@ class InfoView_old(ttk.Frame):
                 column=0,
                 row=idx,
                 sticky=tk.W)
-            duration = timedelta(seconds=self._mp3Info.Duration)
+            duration = timedelta(seconds=self._mp3.Duration)
             msg = tk.Message(
                 self._frm_mp3Info,
                 text=str(duration),
@@ -992,11 +1100,11 @@ class InfoView_old(ttk.Frame):
                 row=idx,
                 sticky=tk.E)
         self._msg_mp3InfoKeys['text'] = 'Duration'
-        self._msg_mp3InfoValues['text'] = str(self._mp3Info.Duration)
+        self._msg_mp3InfoValues['text'] = str(self._mp3.Duration)
         self._msg_mp3InfoKeys['text'] += '\nBitRate'
-        self._msg_mp3InfoValues['text'] += f'\n{self._mp3Info.BitRate}'
+        self._msg_mp3InfoValues['text'] += f'\n{self._mp3.BitRate}'
         self._msg_mp3InfoKeys['text'] += '\nEncoder'
-        self._msg_mp3InfoValues['text'] += f'\n{self._mp3Info.Encoder}'
+        self._msg_mp3InfoValues['text'] += f'\n{self._mp3.Encoder}'
         self._Redraw()
     
     def PopulateLrc(self, lrc: Lrc) -> None:
@@ -1014,11 +1122,12 @@ class LyricsEditor(Sheet):
             **kwargs
             ) -> None:
         super().__init__(parent, **kwargs)
-
+        # Creating attributes...
         self._changed: bool = False
         """Specifies whether contents changed after 'Populate' methid."""
         self._lrc: Lrc
-
+        """The LRC object which this editor is supposed to process it."""
+        # Configuring the sheet...
         self.headers([
             'Timestap',
             'Lyrics/text'])
@@ -1031,8 +1140,7 @@ class LyricsEditor(Sheet):
             'double_click_column_resize',
             'arrowkeys',
             'edit_cell')
-        
-        # Binding...
+        # Binding events...
         self.extra_bindings(
             'end_edit_cell',
             self._OnCellEdited)
@@ -1047,12 +1155,14 @@ class LyricsEditor(Sheet):
         self._changed = True
     
     def ApplyLyrics(self) -> None:
+        """Applies the changes """
         if self._changed:
             data = self.get_sheet_data()
             self._lrc.lyrics = data
             self._changed = False
     
     def Populate(self, lrc: Lrc) -> None:
+        """Populates the provided LRC object into this editor."""
         self._lrc = lrc
         if self._lrc:
             self.set_sheet_data(

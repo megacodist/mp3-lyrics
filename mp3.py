@@ -1,7 +1,10 @@
-"""This module implements the basic functionalities of abstract_mp3_lib
-by the use of FFmpeg project. It is supposed that FFmpeg is installed
-on the machine and the directory is also added the path environment
-variable.
+"""This module implements the functionalities of abstract_mp3.py
+by the use of FFmpeg project.
+
+Dependencies:
+1. Python 3.10+
+2. FFmpeg must be installed on the machine and its directory is also
+required to be added the path environment variable.
 """
 
 from asyncio import AbstractEventLoop
@@ -10,15 +13,19 @@ from json import loads
 from math import isnan
 from pathlib import Path
 import subprocess
+from typing import Any
 
-from abstract_mp3_lib import AbstractMP3Info, AbstractMP3Player
-from abstract_mp3_lib import AbstractMP3Editor
+from abstract_mp3 import AbstractMP3, MP3NotFoundError
 
 
-class FFmpegMP3Info(AbstractMP3Info):
+class FFmpegMP3(AbstractMP3):
     """Implements AbstractMP3Info by using FFmpeg project."""
-    def __init__(self, filename: str | Path) -> None:
-        """Initializes new instance of this class fron 'filename' in
+    def __init__(
+            self,
+            filename: str | Path,
+            loop: AbstractEventLoop | None = None
+            ) -> None:
+        """Initializes new instance of this class from 'filename' in
         the file system.
 
         Exceptions:
@@ -27,13 +34,27 @@ class FFmpegMP3Info(AbstractMP3Info):
         if not Path(filename).exists():
             raise FileNotFoundError(f"'{filename}' has not found")
 
+        # Initializing other attributes...
         self._filename = filename
-        """Specifies the file system address of the MP3 file."""
-        # Getting information of the file & putting them into an object...
-        self._rawData: dict | None = None
+        """Specifies the location of the input audio either in the local
+        file system or on the network.
+        """
+        self._pos: float = 0.0
+        """Specifies the current position of the stream."""
+        self._volume = 50
+        """Specifies the volume of the audio which can be any integer
+        from 0 to 100.
+        """
+        self._playing = False
+        """Specifies whether the audio is playing at the moment or not."""
+        self._popen: subprocess.Popen[str] | None = None
+        """Specifies the Popen object wrapping the child process."""
+        self._rawData: dict[str, Any] | None = None
         """A JSON object (a dictionary) containing all raw multimedia
         attributes about the file.
         """
+
+        # Getting information of the file & putting them into an object...
         args = [
             'ffprobe',
             '-hide_banner',
@@ -64,6 +85,9 @@ class FFmpegMP3Info(AbstractMP3Info):
             self._rawData['format']['duration'])
         self._rawData['format']['bit_rate'] = int(
             self._rawData['format']['bit_rate'])
+        # Checking the input file is an MP3...
+        if self._rawData['format'].get('format_name', None).lower() != 'mp3':
+            raise MP3NotFoundError(f"'{filename}' is not an MP3 file.")
     
     @property
     def Duration(self) -> float:
@@ -99,35 +123,13 @@ class FFmpegMP3Info(AbstractMP3Info):
         return self._rawData['format'].get('tags', {})
     
     @property
+    def nStreams(self) -> int:
+        return self._rawData['format'].get('nb_streams', None)
+    
+    @property
     def RawData(self) -> dict:
         return self._rawData
-
-
-class FFmpegMP3Player(AbstractMP3Player):
-    """Implements AbstractMP3Player by the use of FFmpeg project.
-    This realization does not need the asyncio event loop.
-    """
-    def __init__(
-            self,
-            audio: str | Path,
-            loop: AbstractEventLoop | None = None
-            ) -> None:
-        # Initializing other attributes...
-        self._audioLocation = audio
-        """Specifies the location of the input audio either in the local
-        file system or on the network.
-        """
-        self._pos: float = 0.0
-        """Specifies the current position of the stream."""
-        self._volume = 50
-        """Specifies the volume of the audio which can be any integer
-        from 0 to 100.
-        """
-        self._playing = False
-        """Specifies whether the audio is playing at the moment or not."""
-        self._popen: subprocess.Popen[str] | None = None
-        """Specifies the Popen object wrapping the child process."""
-
+    
     @property
     def volume(self) -> int:
         return self._volume
@@ -176,7 +178,7 @@ class FFmpegMP3Player(AbstractMP3Player):
             '-hide_banner',
             '-autoexit',
             '-i',
-            self._audioLocation,
+            self._filename,
             '-volume',
             str(self._volume),
             '-ss',
@@ -206,7 +208,3 @@ class FFmpegMP3Player(AbstractMP3Player):
             self._popen.terminate()
         except AttributeError:
             pass
-
-
-class FFmpegMP3Editor(AbstractMP3Editor):
-    pass

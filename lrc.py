@@ -1,5 +1,5 @@
 """This module exposes API to parse and work with LRC files which are
-accompany resource for some MP3 files.
+accompanying resource for some MP3 files.
 """
 
 from __future__ import annotations
