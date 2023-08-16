@@ -13,123 +13,13 @@ from tksheet import Sheet
 from tksheet._tksheet_other_classes import EditCellEvent
 
 from abstract_mp3 import AbstractMP3
-from lrc import Lrc, LyricsItem, Timestamp
+from media.lrc import Lrc, LyricsItem, Timestamp
 
 
 class MessageType(IntEnum):
     INFO = 0
     WARNING = 1
     ERROR = 2
-
-
-class FolderView(ttk.Treeview):
-    @classmethod
-    def GetComparer(cls, filename: str) -> tuple[str, str]:
-        """Returns a tuple which the first element is file name without
-        path and extension and the second element is the extension. For
-        example for the file name 'some/path/stem.ext', it returns
-        ('stem', '.ext',)
-        """
-        pFilename = Path(filename)
-        return pFilename.stem.lower(), pFilename.suffix.lower()
-
-    def __init__(
-            self,
-            master: tk.Tk,
-            image: PhotoImage,
-            select_callback: Callable[[str], None],
-            **kwargs) -> None:
-
-        kwargs['selectmode'] = 'browse'
-        super().__init__(master, **kwargs)
-
-        self.heading('#0', anchor=tk.W)
-        self.column(
-            '#0',
-            width=200,
-            stretch=False,
-            anchor=tk.W)
-
-        # Getting the font of the tree view...
-        self._font: Font
-        """Specifies the font of the FolderView."""
-        try:
-            self._font = self['font']
-        except tk.TclError:
-            self._font = nametofont('TkDefaultFont')
-        
-        self._IMG = image
-        """Specifies the image of all items in the FolderView."""
-        self._dir: str | None = None
-        """Specifies the directory of the FolderView."""
-        self._selectCallback: Callable[[str], None] = select_callback
-        """Specifies a callback which is called when an item is selected in
-        the FolderView
-        """
-        self._toIgnoreNextSelect: bool = False
-        """Specifies whether to ignore the next Select event."""
-        self._prevSelectedItem: str = ''
-        """Specifies the previous selected item. it helps avoid firing
-        Select event for the selected item. So to stimulate the Select
-        event, you have to select another item in the list.
-        """
-
-        self.bind(
-            '<<TreeviewSelect>>',
-            self._OnItemSelectionChanged)
-    
-    def AddFilenames(
-            self,
-            folder: str,
-            filenames: list[str],
-            select_idx: int | None = None
-            ) -> None:
-        
-        self._dir = folder
-        # Writing folder in the heading...
-        self.heading('#0', text=folder)
-        # Adding filenames...
-        self._Clear()
-        minColWidth = self.winfo_width() - 4
-        for filename in filenames:
-            itemWidth = 40 + self._font.measure(filename)
-            if itemWidth > minColWidth:
-                minColWidth = itemWidth
-            self.insert(
-                parent='',
-                index=tk.END,
-                text=filename,
-                image=self._IMG)
-        # Setting the minimu width of the column...
-        self.column('#0', width=minColWidth)
-        # Selecting the specified file...
-        self._toIgnoreNextSelect = True
-        if select_idx is not None:
-            self.selection_add(
-                self.get_children('')[select_idx])
-        # Scrolling the FolderView to the selected item...
-        try:
-            self.yview_moveto(select_idx / len(filenames))
-        except TypeError:
-            pass
-
-    def _Clear(self) -> None:
-        """Makes the FolderView empty."""
-        for iid in self.get_children(''):
-            self.delete(iid)
-    
-    def _OnItemSelectionChanged(self, event: tk.Event) -> None:
-        selectedItemID = self.selection()
-        if selectedItemID:
-            selectedItemID = selectedItemID[0]
-            if not self._toIgnoreNextSelect:
-                if self._prevSelectedItem != selectedItemID:
-                    text = self.item(selectedItemID, option='text')
-                    self._selectCallback(
-                        str(Path(self._dir) / text))
-            else:
-                self._toIgnoreNextSelect = False
-            self._prevSelectedItem = selectedItemID
 
 
 class Mp3ListView(tk.Frame):
@@ -1125,6 +1015,10 @@ class LyricsEditor(Sheet):
         # Creating attributes...
         self._changed: bool = False
         """Specifies whether contents changed after 'Populate' methid."""
+        self._hashCols: str
+        """The hash of data in the sheet computed column by column."""
+        self._hashRows: str
+        """The hash of data in the sheet computed row by row."""
         self._lrc: Lrc
         """The LRC object which this editor is supposed to process it."""
         # Configuring the sheet...
@@ -1140,19 +1034,47 @@ class LyricsEditor(Sheet):
             'double_click_column_resize',
             'arrowkeys',
             'edit_cell')
-        # Binding events...
-        self.extra_bindings(
-            'end_edit_cell',
-            self._OnCellEdited)
-        self.extra_bindings(
-            'end_row_index_drag_drop',
-            self._OnRowDragDroped)
     
-    def _OnCellEdited(self, event: EditCellEvent) -> None:
-        self._changed = True
+    def SetChangeOrigin(self) -> None:
+        """Sets the current status of the editor as the origin for
+        chnage comparisons.
+        """
+        data = self.get_sheet_data()
+        self._hashCols = self._HashCols(data)
+        self._hashRows = self._HashRows(data)
     
-    def _OnRowDragDroped(self) -> None:
-        self._changed = True
+    def HasChanged(self) -> bool:
+        """Determines whether the content of the sheet has changed
+        since last origin of change.
+        """
+        data = self.get_sheet_data()
+        hashCols = self._HashCols(data)
+        hashRows = self._HashRows(data)
+        return all([
+            hashCols == self._hashCols,
+            hashRows == self._hashRows])
+
+    def _HashCols(self, data: list[LyricsItem]) -> str:
+        """Computes the hash of the sheet by concatenating timestamps
+        and lyrics respectively.
+        """
+        from hashlib import sha512
+        hash_ = sha512(b'')
+        for lyricsItem in data:
+            hash_.update(str(lyricsItem[0]).encode())
+        for lyricsItem in data:
+            hash_.update(str(lyricsItem[1]).encode())
+        return hash_.hexdigest()
+    
+    def _HashRows(self, data: list[LyricsItem]) -> str:
+        """Computes the hash of the sheet by concatenating `LyricsItem`s.
+        """
+        from hashlib import sha512
+        hash_ = sha512(b'')
+        for lyricsItem in data:
+            hash_.update(
+                str(lyricsItem[0]).encode() + str(lyricsItem[1]).encode())
+        return hash_.hexdigest()
     
     def ApplyLyrics(self) -> None:
         """Applies the changes """
@@ -1172,7 +1094,6 @@ class LyricsEditor(Sheet):
             self.set_sheet_data(
                 [],
                 reset_col_positions=False)
-        self._changed = False
     
     def InsertRowAbove(self) -> None:
         if self._lrc:            

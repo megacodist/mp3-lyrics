@@ -1,7 +1,10 @@
 #
 # 
 #
-"""
+"""This module contains the following items:
+
+#### Functions:
+1. `PathLikeToPath`
 """
 
 

@@ -7,7 +7,7 @@ import sys
 from threading import Thread
 from typing import Any, Callable, Iterable, Mapping
 
-from lrc import Lrc
+from media.lrc import Lrc
 from win_utils import LoadingFolderInfo
 
 

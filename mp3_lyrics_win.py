@@ -12,25 +12,22 @@ from megacodist.collections import SortedList
 from megacodist.keyboard import Modifiers, KeyCodes
 import PIL.Image
 import PIL.ImageTk
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from watchdog.events import FileDeletedEvent, DirDeletedEvent
-from watchdog.events import FileCreatedEvent, DirCreatedEvent
-from watchdog.events import FileMovedEvent, DirMovedEvent
-from watchdog.events import FileModifiedEvent, DirModifiedEvent
-from watchdog.events import FileClosedEvent
 
 from abstract_mp3 import AbstractMP3, MP3NotFoundError
 from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
-from lrc import Lrc, Timestamp
+from media import AbstractPlaylist
+from media.lrc import Lrc, Timestamp
+from utils.async_ops import AfterOpManager
 from widgets import ABView, InfoView, MessageType, MessageView, LyricsView
-from widgets import LyricsEditor, WaitFrame, FolderView
+from widgets import LyricsEditor, WaitFrame
+from widgets.folder_view import FolderView
+from widgets.playlist_view import PlaylistItem, PlaylistView
 from win_utils import LoadingFolderAfterInfo, LoadingLrcAfterInfo
 from win_utils import AfterPlayed
 
 
-class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
+class Mp3LyricsWin(tk.Tk):
     def __init__(
             self,
             res_dir: str | Path,
@@ -63,18 +60,14 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         """
         self._lrc: Lrc | None = None
         """The LRC object associated with the current MP3 file."""
-
-        self._dirObserver: Observer | None = None
-        """Specifies the file system observer object associated with
-        the folder.
-        """
+        self._playlist: AbstractPlaylist | None = None
+        """The playlist object."""
         self._RES_DIR = res_dir
         """Specifies the resource folder of the application."""
         self._asyncThrd = asyncio_thrd
         """Specifies the asyncio thread capable of performing operations
         related to this application.
         """
-
         self._isPlaying: bool = False
         """Specifies whether the MP3 is playing or not."""
         self._TIME_OPERATIONS = 40
@@ -128,11 +121,14 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         self._HGIF_WAIT: PIL.Image.Image
 
         self._LoadRes()
+        self._afterManager = AfterOpManager(self, self._GIF_WAIT)
+        """The manager of asynchronous operations."""
         self._InitGui()
 
         # Applying the rest of settings...
-        self._lastFile = settings['MLW_LAST_FILE']
-        """Specifies the current MP3 file."""
+        self._lastAudio: Path | None = settings['MLW_LAST_FILE']
+        """Specifies the last played audio or maybe the current playing.
+        """
         self._slider_volume.set(settings['MLW_VOLUME'])
         self._lrcedt.set_column_widths([
             settings['MLW_TS_COL_WIDTH'],
@@ -156,8 +152,10 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
             self._OnPTSliderRelease)
         self.protocol('WM_DELETE_WINDOW', self._OnClosingWin)
 
-        self._InitPlayer(self._lastFile)
-        self._LoadFolder(self._lastFile)
+        # Loading last playlist & audio...
+        self._OpenPlaylistAudio(
+            settings['MLW_PLAYLIST_PATH'],
+            self._lastAudio)
     
     def _LoadRes(self) -> None:
         # Loading 'volume.png'...
@@ -165,25 +163,21 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         self._HIMG_VOLUME = PIL.Image.open(self._HIMG_VOLUME)
         self._HIMG_VOLUME = self._HIMG_VOLUME.resize(size=(24, 24,))
         self._IMG_VOLUME = PIL.ImageTk.PhotoImage(image=self._HIMG_VOLUME)
-
         # Loading 'play.png'...
         self._HIMG_PLAY = self._RES_DIR / 'play.png'
         self._HIMG_PLAY = PIL.Image.open(self._HIMG_PLAY)
         self._HIMG_PLAY = self._HIMG_PLAY.resize(size=(24, 24,))
         self._IMG_PLAY = PIL.ImageTk.PhotoImage(image=self._HIMG_PLAY)
-
         # Loading 'pause.png'...
         self._HIMG_PAUSE = self._RES_DIR / 'pause.png'
         self._HIMG_PAUSE = PIL.Image.open(self._HIMG_PAUSE)
         self._HIMG_PAUSE = self._HIMG_PAUSE.resize(size=(24, 24,))
         self._IMG_PAUSE = PIL.ImageTk.PhotoImage(image=self._HIMG_PAUSE)
-
         # Loading 'mp3.png'...
         self._HIMG_MP3 = self._RES_DIR / 'mp3.png'
         self._HIMG_MP3 = PIL.Image.open(self._HIMG_MP3)
         self._HIMG_MP3 = self._HIMG_MP3.resize(size=(16, 16,))
         self._IMG_MP3 = PIL.ImageTk.PhotoImage(image=self._HIMG_MP3)
-
         # Loading 'wait.gif...
         self._HGIF_WAIT = self._RES_DIR / 'wait.gif'
         self._HGIF_WAIT = PIL.Image.open(self._HGIF_WAIT)
@@ -479,7 +473,16 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
             self._lrcvw,
             weight=1)
         
-        #
+        # Packing PlaylistView...
+        self._plyvw = PlaylistView(
+            master=self._pwin_mp3Player,
+            template_dir=self._RES_DIR,
+            template_name='playlist.html')
+        self._pwin_mp3Player.add(
+            self._frm_mp3s,
+            weight=1)
+        
+        """#
         self._frm_mp3s = ttk.Frame(
             master=self._pwin_mp3Player)
         self._frm_mp3s.columnconfigure(
@@ -525,7 +528,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         self._foldervw.grid(
             column=0,
             row=0,
-            sticky=tk.NSEW)
+            sticky=tk.NSEW)"""
         
         #
         self._lrcedt = LyricsEditor(
@@ -556,7 +559,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         self._menu_file.add_command(
             label='Open an MP3...',
             accelerator='Ctrl+O',
-            command=self._OpenMp3)
+            command=self._OpenFile)
         
         # Ceating 'After played' submenu...
         self._menu_afterPlayed = tk.Menu(
@@ -696,7 +699,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         elif (event.state & Modifiers.CONTROL) == Modifiers.CONTROL:
             # Checking Ctrl+O...
             if event.keycode == KeyCodes.O:
-                self._OpenMp3()
+                self._OpenFile()
             # Checking Ctrl+K...
             elif event.keycode == KeyCodes.K:
                 self._lrcedt.InsertRowAbove()
@@ -734,32 +737,6 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
             elif event.keycode == KeyCodes.F5:
                 self._lrcedt.SetTimestamp(self._pos)
     
-    def on_created(self, event: FileCreatedEvent | DirCreatedEvent) -> None:
-        print(event)
-    
-    def on_deleted(self, event: FileDeletedEvent | DirDeletedEvent) -> None:
-        print(event)
-        if isinstance(event, FileDeletedEvent):
-            # Handling file deletion event...
-            pass
-        elif isinstance(event, DirDeletedEvent):
-            # Handling folder deletion event...
-            pass
-        else:
-            logging.error('Incorrect File System event')
-    
-    def on_modified(
-            self,
-            event: FileModifiedEvent | DirModifiedEvent
-            ) -> None:
-        print(event)
-    
-    def on_moved(self, event: FileMovedEvent | DirMovedEvent) -> None:
-        print(event)
-    
-    def on_closed(self, event) -> None:
-        print(event)
-    
     @property
     def pos(self) -> float:
         """Gets or sets the position of the MP3."""
@@ -790,7 +767,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
             self._abvw.length = self._mp3.Duration
             self._abvw.b = self._abvw.length
             self.pos = 0
-            self._lastFile = mp3File
+            self._lastAudio = mp3File
             exceptionOccurred = False
         except FileNotFoundError:
             self._msgvw.AddMessage(
@@ -803,7 +780,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
                 message=f"'{mp3File}' is not a valid MP3 file.",
                 type=MessageType.ERROR)
         else:
-            self.title(f'{Path(self._lastFile).name} - MP3 Lyrics')
+            self.title(f'{Path(self._lastAudio).name} - MP3 Lyrics')
             self._UpdateGui_Playable()
             self._LoadLrc(mp3File)
         finally:
@@ -821,25 +798,63 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
             length += '0'
         self._lbl_lengthMilli['text'] = length
     
-    def _OpenMp3(self) -> None:
-        """Pops up 'Browse for an MP3 file' dialog, loads the MP3 into
+    def _OpenFile(self) -> None:
+        """Pops up 'Browse for a file' dialog, loads the MP3 into
         the player, and also other MP3s in the folder into the Folder
         view.
         """
-        if self._lastFile:
-            folder = str(Path(self._lastFile).resolve().parent)
+        from media import FilenameToPlypathAudio
+        if self._lastAudio:
+            folder = str(Path(self._lastAudio).resolve().parent)
         else:
             folder = None
-        mp3File = askopenfilename(
-            title='Browse for an MP3 file',
+        filename = askopenfilename(
+            title='Browse for a file',
             filetypes=[
                 ('MP3 files', '*.mp3'),
-                ('M3U8 playlist', '*.m3u8')],
+                ('Playlist files', ['*.m3u8', '*.m3u']),
+                ('All supported files', ['*.mp3', '*.m3u8', '*.m3u'])],
             initialdir=folder)
-        if mp3File:
-            self._lastFile = mp3File
-            self._InitPlayer(mp3File)
-            self._LoadFolder(mp3File)
+        if filename:
+            try:
+                pthPlaylist, audio = FilenameToPlypathAudio(filename)
+            except ValueError:
+                msg = f"'{filename}' does not represent a valid audio" \
+                    'or a playlist.'
+                self._msgvw.AddMessage(
+                    title='Invalid audio or playlist',
+                    message=msg,
+                    type=MessageType.ERROR)
+            else:
+                self._OpenPlaylistAudio(pthPlaylist, audio)
+    
+    def _OpenPlaylistAudio(
+            self,
+            playlist: Path,
+            audio: Path | None
+            ) -> None:
+        # Declaring variables -----------------------------
+        from functools import partial
+        from utils.ops import LoadPlaylist
+        # Processing --------------------------------------
+        self._lastAudio = audio
+        # Populating the playlistview...
+        self._afterManager.InitiateOp(
+            start_callback=partial(
+                LoadPlaylist,
+                playlist=playlist,
+                master=self),
+            finished_callback=self._PopulatePlaylist)
+        #self._InitPlayer(filename)
+        #self._LoadFolder(filename)
+    
+    def _PopulatePlaylist(
+            self,
+            playlist: AbstractPlaylist,
+            items: list[PlaylistItem]
+            ) -> None:
+        self._playlist = playlist
+        self._plyvw.Populate(items)
     
     def _LoadFolder(self, folder: str) -> None:
         # Stopping dir observing...
@@ -874,13 +889,6 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
                     folderInfo.folder,
                     folderInfo.mp3s,
                     folderInfo.selectIdx)
-                # Setting folder observer...
-                self._dirObserver = Observer()
-                self._dirObserver.schedule(
-                    event_handler=self,
-                    path=folderInfo.folder,
-                    recursive=False)
-                self._dirObserver.start()
             finally:
                 del self._loadingFolder
                 self._loadingFolder = None
@@ -1175,10 +1183,6 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         return AppSettings().Read(defaults)
 
     def _OnClosingWin(self) -> None:
-        # Stopping dir observing...
-        if self._dirObserver:
-            self._dirObserver.stop()
-            self._dirObserver.join()
         # Closing the MP3 file...
         if self._mp3:
             self._mp3.Close()
@@ -1212,7 +1216,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         
         # Getting other MP3 Lyrics Window (MLW) settings...
         settings['MLW_STATE'] = self.state()
-        settings['MLW_LAST_FILE'] = self._lastFile
+        settings['MLW_LAST_FILE'] = self._lastAudio
         settings['MLW_VOLUME'] = self._slider_volume.get()
         colsWidth = self._lrcedt.get_column_widths()
         settings['MLW_TS_COL_WIDTH'] = colsWidth[0]
@@ -1258,12 +1262,12 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
                 type=MessageType.WARNING)
         else:
             self._LoadLrc(
-                self._lastFile,
+                self._lastAudio,
                 toCreate=self._lrcLoaded)
     
     def _DeleteLrc(self) -> None:
         # Insert code here to delete the LRC file...
-        pLrc = Path(Lrc.GetLrcFilename(self._lastFile))
+        pLrc = Path(Lrc.GetLrcFilename(self._lastAudio))
         if pLrc.exists():
             toDelete = askyesno(message='Do you want to delete the LRC?')
             if toDelete:
@@ -1274,7 +1278,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
                 self._UpdateGui_Lrc()
     
     def _DiscardChanges(self) -> None:
-        self._LoadLrc(self._lastFile)
+        self._LoadLrc(self._lastAudio)
 
     def _UpdateGui_Playable(self) -> None:
         self._btn_palyPause['state'] = tk.NORMAL
@@ -1311,7 +1315,7 @@ class Mp3LyricsWin(tk.Tk, FileSystemEventHandler):
         self._lrcedt.Populate(self._lrc)
 
         # Populating the InofView...
-        self._infovw.PopulateFileInfo(self._lastFile)
+        self._infovw.PopulateFileInfo(self._lastAudio)
         self._infovw.PopulateMp3Info(self._mp3)
         self._infovw.PopulateLrcInfo(self._lrc)
 

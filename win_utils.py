@@ -4,7 +4,7 @@ from pathlib import Path
 
 from attrs import define, field
 
-from widgets import WaitFrame
+from widgets.widgets import WaitFrame
 
 
 class AfterPlayed(IntEnum):

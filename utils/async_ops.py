@@ -129,7 +129,7 @@ class AfterOpManager:
         of asynchronous operations. If it is the empty string, no scheduling
         is registered.
         """
-    
+
     def InitiateOp(
             self,
             start_callback: Callable,

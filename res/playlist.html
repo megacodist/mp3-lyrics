@@ -1,0 +1,59 @@
+{#
+    This templates requires the following context:
+    context = {
+        items: list[PlaylistItem]
+    }
+#}
+
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+    <head>
+        <style>
+            body {
+                font-size: 16px;
+            }
+            h2 {
+                padding: 15px;
+            }
+            h3, h4 {
+                padding: 10px;
+                padding-bottom: 0px;
+            }
+            div.container {
+                width: 90%;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            div.item-box {
+                border-left: 5px solid rgb(156, 156, 216);
+                background-color: rgb(242, 238, 247);
+                margin: 10px;
+                padding-left: 1rem;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            {% if items %}
+                {% for item in items %}
+                    {% set issueIdx = loop.index0 %}
+                    <div class="item-box">
+                        <h3>{{ item.filename }}</h3>
+                        {% if item.title %}
+                            <h4>{{ item.title }}</h4>
+                        {% endif %}
+                        {% if item.album %}
+                            <h4>{{ item.album }}</h4>
+                        {% endif %}
+                        {% if item.artist %}
+                            <h4>{{ item.artist }}</h4>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <h3>No audio was found.</h3>
+            {% endif %}
+        </div>
+    </body>
+</html>

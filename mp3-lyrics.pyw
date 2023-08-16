@@ -17,15 +17,15 @@ from app_utils import ConfigureLogging, SetUnsupFile
 
 
 # Definning global variables...
-_MODULE_DIR = Path(__file__).resolve().parent
+_APP_DIR = Path(__file__).resolve().parent
 
 
 if __name__ == '__main__':
     # Configuring logging...
-    ConfigureLogging(_MODULE_DIR / 'log.log')
+    ConfigureLogging(_APP_DIR / 'log.log')
 
     # Configuring unsupported values...
-    filename = _MODULE_DIR / 'unsup.txt'
+    filename = _APP_DIR / 'unsup.txt'
     if not filename.exists():
         with open(file=filename, mode='x') as fileobj:
             pass
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Loading application settings...
-    filename = _MODULE_DIR / 'bin.bin'
+    filename = _APP_DIR / 'bin.bin'
     if not filename.exists():
         with open(file=filename, mode='x') as fileobj:
             pass
@@ -60,7 +60,7 @@ if __name__ == '__main__':
 
     # running the application...
     mp3TagsWin = Mp3LyricsWin(
-        res_dir=_MODULE_DIR / 'res',
+        res_dir=_APP_DIR / 'res',
         asyncio_thrd=asyncioThrd,
         mp3Class=mp3Class)
     mp3TagsWin.mainloop()
