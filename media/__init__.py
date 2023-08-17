@@ -46,6 +46,11 @@ PLAYLIST_EXTS = [FileExt('.m3u'), FileExt('.m3u8')]
 
 class AbstractPlaylist:
     @property
+    def Path(self) -> Path:
+        """Gets the path of this playlist."""
+        pass
+
+    @property
     def Audios(self) -> tuple[Path, ...]:
         """Gets a list of all available audios in this playlist."""
         pass
@@ -85,7 +90,7 @@ class FolderPlaylist(AbstractPlaylist):
         them must be set for observing functionality.
         """
         from utils.funcs import PathLikeToPath
-        self._master: master
+        self._master = master
         """A widget, typically the main window, that exposes Tk/Tcl
         APIs.
         """
@@ -107,8 +112,9 @@ class FolderPlaylist(AbstractPlaylist):
         """
         self._dirWatcher: FsWatcher | None = None
         """The directory watcher."""
-        self._audios = list(self._dir.glob('*.mp3')).sort(key=self._key)
+        self._audios = list(self._dir.glob('*.mp3'))
         """The audios of this folder playlist."""
+        self._audios.sort(key=self._key)
         if any([self._addedCb, self._changedCb, self._deletedCb]):
             self._dirWatcher = FsWatcher(self._master)
             self._dirWatcher.Monitor(self._dir)
@@ -120,12 +126,19 @@ class FolderPlaylist(AbstractPlaylist):
                 modification_cb=self._OnChanged,
                 rename_from_cb=self._OnDeleted,
                 rename_to_cb=self._OnCreated)
+    
+    @property
+    def Path(self) -> Path:
+        return self._dir
 
     @property
     def Audios(self) -> tuple[Path, ...]:
-        if not self._audios:
-            self.Load()
         return tuple(self._audios)
+    
+    def Reorder(self, key: Callable[[Path], Any] | None = None,) -> None:
+        """Reorders audios in this `FolderPlaylist` object."""
+        self._audios.sort(key=key)
+        self._key = key
     
     def GetIndexFullPath(self, audio: Path) -> tuple[int, Path]:
         """Gets the index andfull path of the audio in this folder
@@ -192,8 +205,8 @@ def FilenameToPlypathAudio(filename: PathLike) -> tuple[Path, Path | None]:
     pthFile = PathLikeToPath(filename)
     if FileExt(pthFile.suffix) in PLAYLIST_EXTS:
         return pthFile, None
-    elif pthFile.is_dir():
-        return pthFile.parent, FileName(pthFile.suffix)
+    elif FileExt(pthFile.suffix) == AUDIO_EXT:
+        return pthFile.parent, FileName(pthFile.name)
     raise ValueError(f"'{filename}' is an invalid path to a playlist")
 
 

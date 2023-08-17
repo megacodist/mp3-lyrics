@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from typing import Type
 
-from abstract_mp3 import AbstractMP3
+from media.abstract_mp3 import AbstractMP3
 from asyncio_thrd import AsyncioThrd
 try:
     import mp3
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     mp3TagsWin = Mp3LyricsWin(
         res_dir=_APP_DIR / 'res',
         asyncio_thrd=asyncioThrd,
-        mp3Class=mp3Class)
+        mp3_class=mp3Class)
     mp3TagsWin.mainloop()
 
     # Finalizing...

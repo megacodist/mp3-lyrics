@@ -42,7 +42,7 @@ class PlaylistView(tk.Frame):
             **kwargs,
             ) -> None:
         super().__init__(master, **kwargs)
-        self._TEMPLATE_DIR = template_dir
+        self._templateDir = template_dir
         """The directory of templates."""
         self._templateName = template_name
         """The name of the template."""
@@ -54,7 +54,8 @@ class PlaylistView(tk.Frame):
         self._htmlFrame = HtmlFrame(
             self,
             vertical_scrollbar=True,
-            horizontal_scrollbar=True,)
+            horizontal_scrollbar=True,
+            messages_enabled=False,)
         self._htmlFrame.pack(
             fill=tk.BOTH,
             expand=True,)
@@ -79,7 +80,7 @@ class PlaylistView(tk.Frame):
         fsLoader = FileSystemLoader(searchpath=self._templateDir)
         env = Environment(loader=fsLoader)
         tmplt = env.get_template(name=self._templateName)
-        result_ = tmplt.render(issues=self._items)
+        result_ = tmplt.render(items=self._items)
         self._htmlFrame.load_html(
             html_source=result_,
             base_url='https://me.me')

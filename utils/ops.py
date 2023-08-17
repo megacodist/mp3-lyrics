@@ -6,6 +6,7 @@
 
 
 from pathlib import Path
+from queue import Queue
 import tkinter as tk
 from typing import Callable, Iterable
 
@@ -16,6 +17,7 @@ from widgets.playlist_view import PlaylistItem
 def LoadPlaylist(
         playlist: Path,
         master: tk.Misc,
+        q: Queue,
         added_cb: Callable[[Path], None] | None = None,
         changed_cb: Callable[[Path], None] | None = None,
         deleted_cb: Callable[[Path], None] | None = None,

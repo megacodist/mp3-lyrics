@@ -15,7 +15,7 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from abstract_mp3 import AbstractMP3, MP3NotFoundError
+from media.abstract_mp3 import AbstractMP3, MP3NotFoundError
 
 
 class FFmpegMP3(AbstractMP3):

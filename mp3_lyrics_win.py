@@ -1,3 +1,10 @@
+#
+# 
+#
+"""
+"""
+
+
 from concurrent.futures import CancelledError
 import logging
 from pathlib import Path
@@ -8,21 +15,25 @@ from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import askyesno
 from typing import Type
 
-from megacodist.collections import SortedList
 from megacodist.keyboard import Modifiers, KeyCodes
 import PIL.Image
 import PIL.ImageTk
 
-from abstract_mp3 import AbstractMP3, MP3NotFoundError
+from media.abstract_mp3 import AbstractMP3, MP3NotFoundError
 from app_utils import AppSettings
 from asyncio_thrd import AsyncioThrd
 from media import AbstractPlaylist
 from media.lrc import Lrc, Timestamp
 from utils.async_ops import AfterOpManager
-from widgets import ABView, InfoView, MessageType, MessageView, LyricsView
-from widgets import LyricsEditor, WaitFrame
+from utils.sorted_list import SortedList
+from widgets.ab_view import ABView
 from widgets.folder_view import FolderView
+from widgets.info_view import InfoView
+from widgets.lyrics_editor import LyricsEditor
+from widgets.lyrics_view import LyricsView
+from widgets.message_view import MessageType, MessageView
 from widgets.playlist_view import PlaylistItem, PlaylistView
+from widgets.wait_frame import WaitFrame
 from win_utils import LoadingFolderAfterInfo, LoadingLrcAfterInfo
 from win_utils import AfterPlayed
 
@@ -32,7 +43,7 @@ class Mp3LyricsWin(tk.Tk):
             self,
             res_dir: str | Path,
             asyncio_thrd: AsyncioThrd,
-            mp3Class: Type[AbstractMP3],
+            mp3_class: Type[AbstractMP3],
             screenName: str | None = None,
             baseName: str | None = None,
             className: str = 'Tk',
@@ -50,7 +61,7 @@ class Mp3LyricsWin(tk.Tk):
             + f"+{settings['MLW_X']}+{settings['MLW_Y']}")
         self.state(settings['MLW_STATE'])
 
-        self._Mp3Class: Type[AbstractMP3] = mp3Class
+        self._Mp3Class: Type[AbstractMP3] = mp3_class
         """Specifies a class to instantiate objects bound to MP3
         processing and functionalities.
         """
@@ -107,7 +118,7 @@ class Mp3LyricsWin(tk.Tk):
         exists or not.
         """
 
-        self._timestamps: SortedList[float] = []
+        self._timestamps: SortedList[float] = SortedList()
 
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
         self._HIMG_PLAY: PIL.Image.Image
@@ -154,7 +165,8 @@ class Mp3LyricsWin(tk.Tk):
 
         # Loading last playlist & audio...
         self._OpenPlaylistAudio(
-            settings['MLW_PLAYLIST_PATH'],
+            #settings['MLW_PLAYLIST_PATH'],
+            Path('.'),
             self._lastAudio)
     
     def _LoadRes(self) -> None:
@@ -479,7 +491,7 @@ class Mp3LyricsWin(tk.Tk):
             template_dir=self._RES_DIR,
             template_name='playlist.html')
         self._pwin_mp3Player.add(
-            self._frm_mp3s,
+            self._plyvw,
             weight=1)
         
         """#
@@ -820,7 +832,7 @@ class Mp3LyricsWin(tk.Tk):
                 pthPlaylist, audio = FilenameToPlypathAudio(filename)
             except ValueError:
                 msg = f"'{filename}' does not represent a valid audio" \
-                    'or a playlist.'
+                    ' or a playlist.'
                 self._msgvw.AddMessage(
                     title='Invalid audio or playlist',
                     message=msg,
@@ -842,17 +854,18 @@ class Mp3LyricsWin(tk.Tk):
         self._afterManager.InitiateOp(
             start_callback=partial(
                 LoadPlaylist,
-                playlist=playlist,
-                master=self),
+                playlist,
+                self),
             finished_callback=self._PopulatePlaylist)
         #self._InitPlayer(filename)
         #self._LoadFolder(filename)
     
     def _PopulatePlaylist(
             self,
-            playlist: AbstractPlaylist,
-            items: list[PlaylistItem]
+            args: tuple[AbstractPlaylist, list[PlaylistItem]],
             ) -> None:
+        playlist = args[0]
+        items = args[1]
         self._playlist = playlist
         self._plyvw.Populate(items)
     
@@ -1173,7 +1186,8 @@ class Mp3LyricsWin(tk.Tk):
             'MLW_X': 200,
             'MLW_Y': 200,
             'MLW_STATE': 'normal',
-            'MLW_LAST_FILE': '',
+            'MLW_LAST_FILE': None,
+            'MLW_PLAYLIST_PATH': Path('.'),
             'MLW_VOLUME': 5.0,
             'MLW_TS_COL_WIDTH': 150,
             'MLW_LT_COL_WIDTH': 300,
@@ -1217,6 +1231,7 @@ class Mp3LyricsWin(tk.Tk):
         # Getting other MP3 Lyrics Window (MLW) settings...
         settings['MLW_STATE'] = self.state()
         settings['MLW_LAST_FILE'] = self._lastAudio
+        settings['MLW_PLAYLIST_PATH'] = self._playlist.Path
         settings['MLW_VOLUME'] = self._slider_volume.get()
         colsWidth = self._lrcedt.get_column_widths()
         settings['MLW_TS_COL_WIDTH'] = colsWidth[0]
