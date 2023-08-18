@@ -161,26 +161,31 @@ class AppSettings(object, metaclass=SingletonMeta):
 
 
 def ConfigureLogging(filename: str | Path) -> None:
+    import platform
+    from datetime import datetime
     # Getting root logger...
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    '''# Logging platform information...
-    loggerFileStream = logging.FileHandler(filename, 'w')
+    # Logging platform information...
+    loggerFileStream = logging.FileHandler(filename, 'a')
     loggerFormatter = logging.Formatter('%(message)s')
     loggerFileStream.setFormatter(loggerFormatter)
     logger.addHandler(loggerFileStream)
 
+    logging.info('=' * 60)
     logNote = (
         f'Operating system: {platform.system()} {platform.release()}'
         + f'(version: {platform.version()}) {platform.architecture()}')
     logging.info(logNote)
     temp = '.'.join(platform.python_version_tuple())
     logNote = f'Python interpreter: {platform.python_implementation()} {temp}'
-    logging.info(logNote + '\n\n')
+    logging.info(logNote)
+    logging.info(datetime.now().strftime("%A %B %#d, %Y, %H:%M:%S"))
+    logging.info('\n\n')
 
     # Logging program events...
-    logger.removeHandler(loggerFileStream)'''
+    logger.removeHandler(loggerFileStream)
     loggerFileStream = logging.FileHandler(filename, 'a')
     loggerFormatter = logging.Formatter(
         fmt=(

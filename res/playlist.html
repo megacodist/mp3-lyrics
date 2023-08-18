@@ -39,15 +39,15 @@
                 {% for item in items %}
                     {% set issueIdx = loop.index0 %}
                     <div class="item-box">
-                        <h3>{{ item.filename }}</h3>
+                        <p>{{ item.filename }}</p>
                         {% if item.title %}
-                            <h4>{{ item.title }}</h4>
+                            <p>{{ item.title }}</p>
                         {% endif %}
                         {% if item.album %}
-                            <h4>{{ item.album }}</h4>
+                            <p>{{ item.album }}</p>
                         {% endif %}
                         {% if item.artist %}
-                            <h4>{{ item.artist }}</h4>
+                            <p>{{ item.artist }}</p>
                         {% endif %}
                     </div>
                 {% endfor %}

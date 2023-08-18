@@ -164,9 +164,8 @@ class Mp3LyricsWin(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self._OnClosingWin)
 
         # Loading last playlist & audio...
-        self._OpenPlaylistAudio(
-            #settings['MLW_PLAYLIST_PATH'],
-            Path('.'),
+        self._LoadPlaylist(
+            settings['MLW_PLAYLIST_PATH'],
             self._lastAudio)
     
     def _LoadRes(self) -> None:
@@ -838,9 +837,9 @@ class Mp3LyricsWin(tk.Tk):
                     message=msg,
                     type=MessageType.ERROR)
             else:
-                self._OpenPlaylistAudio(pthPlaylist, audio)
+                self._LoadPlaylist(pthPlaylist, audio)
     
-    def _OpenPlaylistAudio(
+    def _LoadPlaylist(
             self,
             playlist: Path,
             audio: Path | None
@@ -856,11 +855,11 @@ class Mp3LyricsWin(tk.Tk):
                 LoadPlaylist,
                 playlist,
                 self),
-            finished_callback=self._PopulatePlaylist)
+            finished_callback=self._OnPlaylistLoaded)
         #self._InitPlayer(filename)
         #self._LoadFolder(filename)
     
-    def _PopulatePlaylist(
+    def _OnPlaylistLoaded(
             self,
             args: tuple[AbstractPlaylist, list[PlaylistItem]],
             ) -> None:
@@ -1057,7 +1056,7 @@ class Mp3LyricsWin(tk.Tk):
         except ValueError:
             logging.error(
                 f"There was a problem converting {self._pos}"
-                + f" to a {str(Timestamp.__class__)} object")
+                + f" to a {Timestamp} object")
         # Checking whether the MP3 has finished or not...
         if not self._mp3.playing:
             # The MP3 finished, deciding on the action...
