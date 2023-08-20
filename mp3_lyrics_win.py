@@ -486,60 +486,11 @@ class Mp3LyricsWin(tk.Tk):
         
         # Packing PlaylistView...
         self._plyvw = PlaylistView(
-            master=self._pwin_mp3Player,
-            template_dir=self._RES_DIR,
-            template_name='playlist.html')
+            self._pwin_mp3Player,
+            self._OnPlaylistItemChanged)
         self._pwin_mp3Player.add(
             self._plyvw,
             weight=1)
-        
-        """#
-        self._frm_mp3s = ttk.Frame(
-            master=self._pwin_mp3Player)
-        self._frm_mp3s.columnconfigure(
-            index=0,
-            weight=1)
-        self._frm_mp3s.rowconfigure(
-            index=0,
-            weight=1)
-        self._frm_mp3s.pack(
-            side=tk.RIGHT,
-            fill=tk.Y)
-        self._pwin_mp3Player.add(
-            self._frm_mp3s,
-            weight=1)
-        
-        #
-        self._hscrlbr_mp3s = ttk.Scrollbar(
-            master=self._frm_mp3s,
-            orient='horizontal')
-        self._vscrlbr_mp3s = ttk.Scrollbar(
-            master=self._frm_mp3s,
-            orient='vertical')
-        self._foldervw = FolderView(
-            master=self._frm_mp3s,
-            image=self._IMG_MP3,
-            select_callback=self._InitPlayer,
-            xscrollcommand=self._hscrlbr_mp3s.set,
-            yscrollcommand=self._vscrlbr_mp3s.set)
-        self._foldervw.grid(
-            column=0,
-            row=0,
-            sticky=tk.NSEW)
-        self._hscrlbr_mp3s['command'] = self._foldervw.xview
-        self._vscrlbr_mp3s['command'] = self._foldervw.yview
-        self._hscrlbr_mp3s.grid(
-            column=0,
-            row=1,
-            sticky=tk.EW)
-        self._vscrlbr_mp3s.grid(
-            column=1,
-            row=0,
-            sticky=tk.NS)
-        self._foldervw.grid(
-            column=0,
-            row=0,
-            sticky=tk.NSEW)"""
         
         #
         self._lrcedt = LyricsEditor(
@@ -815,10 +766,7 @@ class Mp3LyricsWin(tk.Tk):
         view.
         """
         from media import FilenameToPlypathAudio
-        if self._lastAudio:
-            folder = str(Path(self._lastAudio).resolve().parent)
-        else:
-            folder = None
+        folder = self._playlist.Path if self._playlist else None
         filename = askopenfilename(
             title='Browse for a file',
             filetypes=[
@@ -867,6 +815,9 @@ class Mp3LyricsWin(tk.Tk):
         items = args[1]
         self._playlist = playlist
         self._plyvw.Populate(items)
+    
+    def _OnPlaylistItemChanged(self, idx: int) -> None:
+        pass
     
     def _LoadFolder(self, folder: str) -> None:
         # Stopping dir observing...

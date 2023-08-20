@@ -26,7 +26,7 @@ def LoadPlaylist(
     object and all included audios in the playlist as a 2-tuple. It
     returns `(None, None)` on any error.
     """
-    from media import PLAYLIST_EXTS, FolderPlaylist
+    from media import PLAYLIST_EXTS, FolderPlaylist, GetAllTags
     if playlist.is_dir():
         playlistObj = FolderPlaylist(
             master=master,
@@ -42,4 +42,5 @@ def LoadPlaylist(
     for pth in playlistObj.Audios:
         plyItems.append(PlaylistItem())
         plyItems[-1].filename = pth
+        plyItems[-1].tags = GetAllTags(playlist / pth)
     return playlistObj, plyItems

@@ -198,14 +198,14 @@ class LyricsView(ttk.Frame):
     def _GetWidth(self) -> int:
         """Gets the available width of canvas for drawing."""
         return (
-            self._cnvs.winfo_width()
+            self._cnvs.winfo_reqwidth()
             - 4
             + (int(self._cnvs['bd']) << 1))
     
     def _GetHeight(self) -> int:
         """Gets the available height of canvas for drawing."""
         return (
-            self._cnvs.winfo_height()
+            self._cnvs.winfo_reqheight()
             - 4
             + (int(self._cnvs['bd']) << 1))
     
@@ -272,7 +272,7 @@ class LyricsView(ttk.Frame):
             width=cnvsWidth,
             window=self._msgs[0])
         self._cnvs.update()
-        y += self._msgs[0].winfo_height()
+        y += self._msgs[0].winfo_reqheight()
         
         # Drawing the rest of Messages (lyrics)...
         for idx in range(1, nLyrics):
@@ -299,7 +299,7 @@ class LyricsView(ttk.Frame):
                 width=cnvsWidth,
                 window=self._msgs[idx])
             self._cnvs.update()
-            y += self._msgs[idx].winfo_height()
+            y += self._msgs[idx].winfo_reqheight()
         
         # Setting the scroll region...
         self._extraHeight = y + cnvsHalfHeight

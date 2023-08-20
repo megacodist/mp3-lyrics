@@ -149,7 +149,7 @@ class MessageView(ttk.Frame):
                 y,
                 anchor=tk.N,
                 window=self._msgs[0])
-            y += self._msgs[0].winfo_height()
+            y += self._msgs[0].winfo_reqheight()
         idx = 1
         while idx < len(self._msgs):
             y += self._gap
@@ -158,7 +158,7 @@ class MessageView(ttk.Frame):
                 y,
                 anchor=tk.N,
                 window=self._msgs[idx])
-            y += self._msgs[idx].winfo_height()
+            y += self._msgs[idx].winfo_reqheight()
             idx += 1
         y += self._pady
         if y < cnvsHeight:

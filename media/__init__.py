@@ -112,7 +112,7 @@ class FolderPlaylist(AbstractPlaylist):
         """
         self._dirWatcher: FsWatcher | None = None
         """The directory watcher."""
-        self._audios = list(self._dir.glob('*.mp3'))
+        self._audios = list(Path(pth.name) for pth in self._dir.glob('*.mp3'))
         """The audios of this folder playlist."""
         self._audios.sort(key=self._key)
         if any([self._addedCb, self._changedCb, self._deletedCb]):
@@ -222,3 +222,18 @@ def PathToPlaylist(filename: PathLike) -> AbstractPlaylist:
     elif pth.is_dir():
         return FolderPlaylist(pth)
     raise ValueError(f"'{filename}' is an invalid path to a playlist")
+
+
+def GetAllTags(mp3_file: PathLike) -> dict[str, list[str]]:
+    """Returns all tags from the specified MP3 file."""
+    from collections import defaultdict
+    from mutagen.id3 import ID3
+    tags: defaultdict[str, list[str]] = defaultdict(list)
+    id3 = ID3(mp3_file)
+    for tag in id3:
+        try:
+            for value in id3[tag]:
+                tags[tag].append(value)
+        except TypeError:
+            pass
+    return tags
