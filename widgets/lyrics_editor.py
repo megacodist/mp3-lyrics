@@ -90,6 +90,11 @@ class LyricsEditor(tksheet.Sheet):
             self._lrc.lyrics = data
             self._changed = False
     
+    def GetAllLyricsItems(self) -> list[LyricsItem]:
+        """Gets all the content of the editor as a list of `LyricsItem`
+        objects."""
+        return self.get_sheet_data()
+    
     def Populate(self, lrc: Lrc) -> None:
         """Populates the provided LRC object into this editor."""
         self._lrc = lrc

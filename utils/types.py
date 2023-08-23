@@ -11,6 +11,7 @@
 """
 
 
+from os import PathLike
 import pathlib
 
 import PIL.ImageTk
@@ -35,5 +36,32 @@ TkImg = PIL.ImageTk.PhotoImage
 """Tkinter compatible image type."""
 
 
-GifImage = list[PIL.ImageTk.PhotoImage]
-"""It is actually a list of PIL.ImageTk.PhotoImage to hold the GIF frames."""
+#GifImage = list[PIL.ImageTk.PhotoImage]
+class GifImage:
+    """It is actually a list of `PIL.ImageTk.PhotoImage` to hold the
+    GIF frames. The objects of this class support zero-based integer
+    subscript notation for reading, not setting, GIF frames.
+    """
+    def __init__(self, gif: PathLike) -> None:
+        import PIL.Image
+        self._frames: list[PIL.ImageTk.PhotoImage] = []
+        """The frames of this GIF image."""
+        self._HGIF_WAIT = PIL.Image.open(gif)
+        idx = 0
+        while True:
+            try:
+                self._HGIF_WAIT.seek(idx)
+                self._frames.append(
+                    PIL.ImageTk.PhotoImage(image=self._HGIF_WAIT))
+                idx += 1
+            except EOFError :
+                break
+    
+    def __getitem__(self, __idx: int, /) -> PIL.ImageTk.PhotoImage:
+        return self._frames[__idx]
+    
+    def __del__(self) -> None:
+        self._frames.clear()
+        del self._frames
+        self._HGIF_WAIT.close()
+        del self._HGIF_WAIT

@@ -6,6 +6,7 @@ from __future__ import annotations
 from copy import deepcopy
 from enum import IntFlag
 from math import modf
+from os import PathLike
 from pathlib import Path
 import re
 from typing import overload
@@ -250,16 +251,12 @@ class Lrc:
         've',]
     
     @classmethod
-    def GetLrcFilename(cls, filename: str) -> str:
+    def GetLrcFilename(cls, filename: PathLike) -> Path:
         """Returns the probably LRC file name associated with 'filename'
         parameter. This LRC file might exist or not.
         """
-        pathObj = Path(filename)
-        extLength = len(pathObj.suffix)
-        if extLength:
-            return filename[:-extLength] + '.lrc'
-        else:
-            return filename + '.lrc'
+        pth = filename if isinstance(filename, Path) else Path(filename)
+        return pth.with_suffix('.lrc')
     
     @classmethod
     def CreateLrc(cls, filename: str | Path) -> None:

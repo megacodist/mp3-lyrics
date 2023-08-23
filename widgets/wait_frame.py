@@ -17,7 +17,7 @@ class WaitFrame(ttk.Frame):
             self,
             master: tk.Misc,
             wait_gif: list[TkImg],
-            cancel_callback: Callable[[], None],
+            cancel_cb: Callable[[], None],
             **kwargs
             ) -> None:
         super().__init__(master, **kwargs)
@@ -26,7 +26,7 @@ class WaitFrame(ttk.Frame):
         # Storing inbound references...
         self._master = master
         self._GIF_WAIT = wait_gif
-        self._cancelCallback = cancel_callback
+        self._cancelCallback = cancel_cb
 
         self._afterID: str | None = None
         self._TIME_AFTER = 40

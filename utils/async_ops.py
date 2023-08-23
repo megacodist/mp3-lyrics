@@ -1,12 +1,14 @@
 #
 # 
 #
-"""This module provides asynchronous operations for the application."""
+"""
+"""
 
-from __future__ import annotations
-from concurrent.futures import Future, ThreadPoolExecutor
-from enum import IntEnum
+
+from concurrent.futures import ThreadPoolExecutor, Future
+import enum
 from queue import Queue, Empty
+from threading import RLock
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable, Iterable
@@ -14,91 +16,79 @@ from typing import Any, Callable, Iterable
 from utils.types import GifImage
 
 
-class MsgQManager:
-    """Message queue manager."""
-    def __init__(self) -> None:
-        self._qlst: list[Queue] = []
-        """The internal list of allocated Queue objects."""
-    
-    def Allocate(self, n: int = 0) -> Queue:
-        """Allocates a message-exchanging Queue for a multithreading
-        situation. The allocated Queue must be released with a call to
-        'Free' method. 'n' is the maximum size of the queue.
-        """
-        try:
-            while self._qlst[-1] is None:
-                self._qlst.pop()
-        except IndexError:
-            pass
-        q = Queue(n)
-        self._qlst.append(q)
-        return q
-
-    def Free(self, q: Queue) -> None:
-        """Fress the provided Queue from the internal list. If the list
-        does not find, it raises ValueError.
-        """
-        try:
-            idx = self._qlst.index(q)
-            del q
-            q = self._qlst[idx]
-            self._qlst[idx] = None
-            del q
-        except ValueError:
-            raise ValueError('The specified Queue was not found.')
-
-
-class AfterOpStatus(IntEnum):
+class AfterOpStatus(enum.IntEnum):
     PENDING = 0
     """The operation if pending for execution."""
     RUNNING = 1
     """The operation is in progress."""
     FINISHED = 2
-    """The operation was finished or canceled."""
+    """The operation was finished."""
+    CANCELED = 3
+    """The operation was canceled."""
 
 
-class AfterOp:
+class _AfterOp:
     """Represents a asynchronous (on another thread) operation which
     usually makes updates in the GUI with the use of 'after' method of
     the window.
+
+    Objects of this class have the following characteristics:
+    * hashability
     """
+    _mtx_hash = RLock()
+    """This mutex is used to ensure uniqueness of hash values among
+    objects of tis class.
+    """
+
+    @classmethod
+    def _GetHash(cls) -> int:
+        """Returns a unique hash for every call."""
+        from datetime import datetime
+        cls._mtx_hash.acquire()
+        curDateTime = datetime.now()
+        cls._mtx_hash.release()
+        return hash(curDateTime)
+
     def __init__(
             self,
             thrd_pool: ThreadPoolExecutor,
-            wait_gif: GifImage,
-            start_callback: Callable[[], Any],
-            finished_callback: Callable[[], None] | None = None,
-            cancel_callback: Callable[[Any], None] | None = None,
+            q: Queue | None,
+            start_cb: Callable[[Queue | None], Any],
+            finish_cb: Callable[[Any], None] | None = None,
+            cancel_cb: Callable[[], None] | None = None,
             widgets: Iterable[tk.Widget] = (),
             ) -> None:
+        self._hash = _AfterOp._GetHash()
+        """The unique hash of this instance."""
         self._thPool = thrd_pool
-        self._GIF_WAIT = wait_gif
-        self._cbStart = start_callback
-        self._cbFinished = finished_callback
-        self._cbCanceled = cancel_callback
+        """The thread pool executor."""
+        self._cbStart = start_cb
+        """The callback which starts this async operation."""
+        self._cbFinished = finish_cb
+        """The callback which is called upon completion of this async
+        operation.
+        """
+        self._cbCanceled = cancel_cb
+        """The callback which is called upon cancelation of this async
+        operation.
+        """
         self._widgets = widgets
-        self._q = Queue()
+        """The widgets that this operation has a effect on them."""
+        self._q = q
         """Messaging queue for the asynchronous operation."""
         self._future: Future | None = None
-        self._ststus = AfterOpStatus.PENDING
-        self._waitFrames: list[WaitFrame] = []
+        """The future object which represents the due result."""
+        self._status = AfterOpStatus.PENDING
+        """Status of this `_AfterOp` object."""
     
     def Start(self) -> None:
         """Starts this asynchronous ('after') operation."""
         self._future = self._thPool.submit(self._cbStart, self._q)
-        self._ststus = AfterOpStatus.RUNNING
-        for wdgt in self._widgets:
-            waitFrame = WaitFrame(
-                wdgt,
-                self._GIF_WAIT,
-                self._q,
-                self._future.cancel)
-            self._waitFrames.append(waitFrame)
-            waitFrame.Show()
+        self._status = AfterOpStatus.RUNNING
     
-    def CloseWaitFrames(self) -> None:
-        for waitFrame in self._waitFrames:
-            waitFrame.Close()
+    def Cancel(self) -> None:
+        self._future.cancel()
+        self._status = AfterOpStatus.CANCELED
     
     def HasDone(self) -> bool:
         """Returns True if the operation has finished or canceled,
@@ -107,7 +97,43 @@ class AfterOp:
     
     def HasCanceled(self) -> bool:
         """Returns True if the operation has canceled, otherwise False."""
-        return self._future.cancelled()
+        return self._future.cancelled() or \
+            self._status == AfterOpStatus.CANCELED
+    
+    def __hash__(self) -> int:
+        return self._hash
+    
+    def __del__(self) -> None:
+        del self._hash
+        del self._thPool
+        del self._cbCanceled
+        del self._cbFinished
+        del self._cbStart
+        del self._status
+        del self._q
+        del self._future
+        del self._widgets
+
+
+class _WidgetAssets:
+    def __init__(
+            self,
+            widget: tk.Widget,
+            wait_gif: GifImage,
+            ) -> None:
+        self.widget = widget
+        """The `Widget` that this object holds its assets."""
+        self.q = Queue()
+        self.ops: set[_AfterOp] = set()
+        """The operations """
+        self.waitFrame = WaitFrame(widget, wait_gif, self.q, self)
+    
+    def __del__(self) -> None:
+        del self.widget
+        del self.q
+        self.ops.clear()
+        del self.ops
+        del self.waitFrame
 
 
 class AfterOpManager:
@@ -118,10 +144,14 @@ class AfterOpManager:
             ) -> None:
         self._master = master
         self._GIF_WAIT = gif_wait
-        self._afterOps: list[AfterOp] = []
-        """The internal list of AfterOp objects."""
+        self._afterOps: set[_AfterOp] = set()
+        """The internal list of `_AfterOp` objects."""
         self._INTRVL = 40
-        """The duration of time in millisecond"""
+        """The duration of time in millisecond to check status of ongoing
+        operations.
+        """
+        self._widgets: dict[tk.Widget, _WidgetAssets] = {}
+        """All the widgets that has any asynchronous operation."""
         self._thPool = ThreadPoolExecutor()
         """The thread pool to manage asynchronous operations."""
         self._afterID: str = ''
@@ -132,21 +162,33 @@ class AfterOpManager:
 
     def InitiateOp(
             self,
-            start_callback: Callable,
-            finished_callback: Callable | None = None,
-            cancel_callback: Callable | None = None,
+            start_cb: Callable[[Queue | None], Any],
+            finish_cb: Callable[[Any], None] | None = None,
+            cancel_cb: Callable[[], None] | None = None,
             widgets: Iterable[tk.Widget] = (),
             ) -> None:
-        """Initiates an 'after' operation."""
-        self._afterOps.append(AfterOp(
+        """Initiates an `after` operation."""
+        # Making assets for all the involving widgets...
+        for widget in widgets:
+            try:
+                self._widgets[widget]
+            except KeyError:
+                self._widgets[widget] = _WidgetAssets(widget, self._GIF_WAIT)
+        # Making an `_AfterOp` object...
+        asyncOp = _AfterOp(
             self._thPool,
-            self._GIF_WAIT,
-            start_callback,
-            finished_callback,
-            cancel_callback,
-            widgets))
+            self._widgets[widgets[0]].q if widgets else None,
+            start_cb,
+            finish_cb,
+            cancel_cb,
+            widgets)
+        for widget in widgets:
+            self._widgets[widget].ops.add(asyncOp)
+        self._afterOps.add(asyncOp)
         # Starting the asynchronous operation...
-        self._afterOps[-1].Start()
+        asyncOp.Start()
+        for widget in widgets:
+            self._widgets[widget].waitFrame.Show()
         # Scheduling the track of 'after' operations...
         if not self._afterID:
             self._afterID = self._master.after(
@@ -154,43 +196,46 @@ class AfterOpManager:
                 self._TrackAfterOps,)
     
     def _TrackAfterOps(self) -> None:
+        # Looking for finished async ops...
+        finishedOps: set[_AfterOp] = set()
+        canceledOps: set[_AfterOp] = set()
         for afterOp in self._afterOps:
             if afterOp.HasDone():
-                afterOp._ststus = AfterOpStatus.FINISHED
-                afterOp.CloseWaitFrames()
-                if afterOp.HasCanceled():
-                    if afterOp._cbCanceled:
-                        afterOp._cbCanceled()
-                else:
-                    if afterOp._cbFinished:
-                        afterOp._cbFinished(afterOp._future.result())
-        self._RemoveFinishedOps()
-        if self._IsAnyRunning():
+                finishedOps.add(afterOp)
+            elif afterOp.HasCanceled():
+                finishedOps.add(afterOp)
+        if finishedOps:
+            for afterOp in finishedOps:
+                afterOp._status = AfterOpStatus.FINISHED
+                for widget in afterOp._widgets:
+                    self._widgets[widget].ops.remove(afterOp)
+                afterOp._cbFinished(afterOp._future)
+            self._afterOps.difference_update(finishedOps)
+        if canceledOps:
+            for afterOp in finishedOps:
+                for widget in afterOp._widgets:
+                    self._widgets[widget].ops.remove(afterOp)
+                if afterOp._cbCanceled:
+                    afterOp._cbCanceled()
+            self._afterOps.difference_update(canceledOps)
+        if finishedOps or canceledOps:
+            self._CloseFinishedWaitFrames()
+        # Scheduling next round of tracking async ops...
+        if self._afterOps:
             self._afterID = self._master.after(
                 self._INTRVL,
                 self._TrackAfterOps,)
         else:
             self._afterID = ''
-
-    def _RemoveFinishedOps(self) -> None:
-        """Removes finished operations from the internal list."""
-        idx = 0
-        try:
-            while True:
-                if self._afterOps[idx]._ststus == AfterOpStatus.FINISHED:
-                    del self._afterOps[idx]
-                else:
-                    idx += 1
-        except IndexError:
-            pass
     
-    def _IsAnyRunning(self) -> bool:
-        """Determines if any AfterOp object is in progress or all
-        of them is finished.
-        """
-        return any(
-            op._ststus == AfterOpStatus.RUNNING
-            for op in self._afterOps)
+    def _CloseFinishedWaitFrames(self) -> None:
+        for widget in self._widgets:
+            if self._widgets[widget].ops == set():
+                self._widgets[widget].waitFrame.Close()
+        self._widgets = {
+            widget:assets
+            for widget, assets in self._widgets.items()
+            if assets.ops}
 
 
 class WaitFrame(ttk.Frame):
@@ -199,7 +244,7 @@ class WaitFrame(ttk.Frame):
             master: tk.Misc,
             wait_gif: GifImage,
             q: Queue,
-            cancel_callback: Callable[[], None],
+            assets: _WidgetAssets,
             **kwargs
             ) -> None:
         super().__init__(master, **kwargs)
@@ -209,18 +254,15 @@ class WaitFrame(ttk.Frame):
         self._master = master
         self._GIF_WAIT = wait_gif
         self._q = q
-        self._cbCancel = cancel_callback
-
+        self._assets = assets
         self._afterID: str | None = None
         self._TIME_AFTER = 40
+        self._shown: bool = False
+        """Specifies whether this wait frame has been shown or not."""
 
         # Configuring the grid geometry manager...
-        self.columnconfigure(
-            index=0,
-            weight=1)
-        self.rowconfigure(
-            index=0,
-            weight=1)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
         
         #
         self._lbl_wait = ttk.Label(
@@ -248,7 +290,7 @@ class WaitFrame(ttk.Frame):
         self._btn_cancel = ttk.Button(
             master=self,
             text='Cancel',
-            command=self._Cancel)
+            command=self.Cancel)
         self._btn_cancel.grid(
             column=0,
             row=2,
@@ -256,6 +298,8 @@ class WaitFrame(ttk.Frame):
             pady=(4, 8,))
     
     def Show(self) -> None:
+        if self._shown:
+            return
         self.place(
             relx=0.5,
             rely=0.5,
@@ -265,6 +309,7 @@ class WaitFrame(ttk.Frame):
             self._TIME_AFTER,
             self._UpdateGui,
             1)
+        self._shown = True
 
     def Close(self) -> None:
         """Closes this WaitFrame."""
@@ -273,13 +318,17 @@ class WaitFrame(ttk.Frame):
         self.place_forget()
         self.destroy()
     
-    def ShowCanceling(self) -> None:
+    def _ShowCanceling(self) -> None:
         self._btn_cancel['text'] = 'Canceling...'
         self._btn_cancel['state'] = tk.DISABLED
     
-    def _Cancel(self) -> None:
-        self.ShowCanceling()
-        self._cbCancel()
+    def Cancel(self) -> None:
+        """Cancels the asyncronous operations associated with this wait
+        frame.
+        """
+        self._ShowCanceling()
+        for op in self._assets.ops:
+            op.Cancel()
     
     def _UpdateGui(self, idx: int) -> None:
         # Showing next GIF frame...
@@ -302,8 +351,10 @@ class WaitFrame(ttk.Frame):
     def __del__(self) -> None:
         del self._master
         del self._GIF_WAIT
-        del self._cbCancel
+        del self._assets
         del self._TIME_AFTER
         del self._btn_cancel
         del self._lbl_wait
+        del self._msg
         del self._afterID
+        del self._shown

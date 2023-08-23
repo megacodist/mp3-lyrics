@@ -46,21 +46,32 @@ PLAYLIST_EXTS = [FileExt('.m3u'), FileExt('.m3u8')]
 
 class AbstractPlaylist:
     @property
+    @abstractmethod
     def Path(self) -> Path:
         """Gets the path of this playlist."""
         pass
 
     @property
+    @abstractmethod
     def Audios(self) -> tuple[Path, ...]:
         """Gets a list of all available audios in this playlist."""
         pass
 
     @abstractmethod
-    def GetIndexFullPath(self, audio: Path) -> tuple[int, Path]:
-        """Gets the index andfull path of the audio in this folder
-        playlist respectively. It raises `ValueError` if it is not
-        present in the object.
+    def GetIndices(self, audio: Path) -> list[int]:
+        """Gets indices of the specified audio in the playlist.
+        If the audio did not find, the returned list is empty,
         """
+        pass
+
+    @abstractmethod
+    def GetFullPath(self, idx: int) -> Path:
+        """Gets full path of `idx`th audio in this playlist."""
+        pass
+
+    @abstractmethod
+    def GetAudio(self, idx: int) -> Path:
+        """Gets the `idx`th audio in this playlist."""
         pass
 
 
@@ -140,15 +151,21 @@ class FolderPlaylist(AbstractPlaylist):
         self._audios.sort(key=key)
         self._key = key
     
-    def GetIndexFullPath(self, audio: Path) -> tuple[int, Path]:
-        """Gets the index andfull path of the audio in this folder
-        playlist respectively. It raises `ValueError` if it is not
-        present in the object.
-        """
+    def GetIndices(self, audio: Path) -> list[int]:
         try:
-            return self._audios.index(audio), self._dir / audio
+            return [self._audios.index(audio)]
+        except ValueError:
+            return []
+    
+    def GetAudio(self, idx: int) -> Path:
+        return self._audios[idx]
+    
+    def GetFullPath(self, idx: int) -> Path:
+        try:
+            return self._dir / self._audios[idx]
         except ValueError as err:
-            err.args[0] = f'{audio} not found in {self}'
+            err.args = f"'{self._dir}' does not contain an audio at " \
+                f"the index of {idx}"
             raise err
     
     def Close(self) -> None:

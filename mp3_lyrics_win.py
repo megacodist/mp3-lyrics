@@ -5,8 +5,9 @@
 """
 
 
-from concurrent.futures import CancelledError
+from concurrent.futures import CancelledError, Future
 import logging
+from os import PathLike
 from pathlib import Path
 import re
 import tkinter as tk
@@ -26,6 +27,7 @@ from media import AbstractPlaylist
 from media.lrc import Lrc, Timestamp
 from utils.async_ops import AfterOpManager
 from utils.sorted_list import SortedList
+from utils.types import GifImage
 from widgets.ab_view import ABView
 from widgets.folder_view import FolderView
 from widgets.info_view import InfoView
@@ -128,8 +130,7 @@ class Mp3LyricsWin(tk.Tk):
         self._HIMG_VOLUME: PIL.Image.Image
         self._IMG_MP3: PIL.ImageTk.PhotoImage
         self._HIMG_MP3: PIL.Image.Image
-        self._GIF_WAIT: list[PIL.ImageTk.PhotoImage]
-        self._HGIF_WAIT: PIL.Image.Image
+        self._GIF_WAIT: GifImage
 
         self._LoadRes()
         self._afterManager = AfterOpManager(self, self._GIF_WAIT)
@@ -161,12 +162,10 @@ class Mp3LyricsWin(tk.Tk):
         self._slider_playTime.bind(
             '<ButtonRelease-1>',
             self._OnPTSliderRelease)
-        self.protocol('WM_DELETE_WINDOW', self._OnClosingWin)
+        self.protocol('WM_DELETE_WINDOW', self._OnWinClosing)
 
         # Loading last playlist & audio...
-        self._LoadPlaylist(
-            settings['MLW_PLAYLIST_PATH'],
-            self._lastAudio)
+        self._LoadPlaylist(settings['MLW_PLAYLIST_PATH'])
     
     def _LoadRes(self) -> None:
         # Loading 'volume.png'...
@@ -190,18 +189,7 @@ class Mp3LyricsWin(tk.Tk):
         self._HIMG_MP3 = self._HIMG_MP3.resize(size=(16, 16,))
         self._IMG_MP3 = PIL.ImageTk.PhotoImage(image=self._HIMG_MP3)
         # Loading 'wait.gif...
-        self._HGIF_WAIT = self._RES_DIR / 'wait.gif'
-        self._HGIF_WAIT = PIL.Image.open(self._HGIF_WAIT)
-        self._GIF_WAIT: list[PhotoImage] = []
-        idx = 0
-        while True:
-            try:
-                self._HGIF_WAIT.seek(idx)
-                self._GIF_WAIT.append(
-                    PIL.ImageTk.PhotoImage(image=self._HGIF_WAIT))
-                idx += 1
-            except EOFError :
-                break
+        self._GIF_WAIT = GifImage(self._RES_DIR / 'wait.gif')
     
     def _InitGui(self) -> None:      
         #
@@ -487,7 +475,7 @@ class Mp3LyricsWin(tk.Tk):
         # Packing PlaylistView...
         self._plyvw = PlaylistView(
             self._pwin_mp3Player,
-            self._OnPlaylistItemChanged)
+            self._LoadAudio)
         self._pwin_mp3Player.add(
             self._plyvw,
             weight=1)
@@ -597,13 +585,9 @@ class Mp3LyricsWin(tk.Tk):
             label='Editor',
             menu=self._menu_etitor)
         self._menu_etitor.add_command(
-            label='Create LRC',
-            accelerator='Ctrl+N',
-            command=self._CreateLrc)
-        self._menu_etitor.add_command(
-            label='Save LRC',
+            label='Save/create LRC',
             accelerator='Ctrl+S',
-            command=self._SaveLrc)
+            command=self._SaveCreateLrc)
         self._menu_etitor.add_command(
             label='Discard changes')
         self._menu_etitor.add_command(
@@ -670,16 +654,13 @@ class Mp3LyricsWin(tk.Tk):
                 self._lrcedt.InsertRowBelow()
             # Checking Ctrl+S...
             elif event.keycode == KeyCodes.S:
-                self._SaveLrc()
+                self._SaveCreateLrc()
             # Checking Ctrl+V...
             elif event.keycode == KeyCodes.U:
                 self._lrcedt.OverrideFromClipboard()
             # Checking Ctrl+I...
             elif event.keycode == KeyCodes.I:
                 self._lrcedt.InsertFromClipboard()
-            # Checking Ctrl+N...
-            elif event.keycode == KeyCodes.N:
-                self._CreateLrc()
             elif event.keycode == KeyCodes.P:
                 self._PlayPause()
             elif event.keycode == KeyCodes.A:
@@ -785,99 +766,115 @@ class Mp3LyricsWin(tk.Tk):
                     message=msg,
                     type=MessageType.ERROR)
             else:
-                self._LoadPlaylist(pthPlaylist, audio)
+                self._lastAudio = audio
+                self._LoadPlaylist(pthPlaylist)
     
-    def _LoadPlaylist(
-            self,
-            playlist: Path,
-            audio: Path | None
-            ) -> None:
+    def _LoadPlaylist(self, playlist: Path,) -> None:
+        """Loads the playlist and upon completion `_OnPlaylistLoaded`
+        gets triggered.
+        """
         # Declaring variables -----------------------------
         from functools import partial
         from utils.ops import LoadPlaylist
         # Processing --------------------------------------
-        self._lastAudio = audio
         # Populating the playlistview...
         self._afterManager.InitiateOp(
-            start_callback=partial(
+            start_cb=partial(
                 LoadPlaylist,
                 playlist,
                 self),
-            finished_callback=self._OnPlaylistLoaded)
-        #self._InitPlayer(filename)
-        #self._LoadFolder(filename)
+            finish_cb=self._OnPlaylistLoaded,
+            widgets=(self._plyvw,))
     
     def _OnPlaylistLoaded(
             self,
-            args: tuple[AbstractPlaylist, list[PlaylistItem]],
+            future: Future[tuple[AbstractPlaylist, list[PlaylistItem]]],
             ) -> None:
+        """This callback gets triggered whenever loading of the playlist
+        has finished.
+        """
+        args = future.result()
         playlist = args[0]
         items = args[1]
         self._playlist = playlist
         self._plyvw.Populate(items)
+        self._CheckAudioInPlaylist()
     
-    def _OnPlaylistItemChanged(self, idx: int) -> None:
-        pass
-    
-    def _LoadFolder(self, folder: str) -> None:
-        # Stopping dir observing...
-        if self._dirObserver:
-            self._dirObserver.stop()
-            self._dirObserver.join()
-        # Loading new dir...
-        future = self._asyncThrd.LoadFolder(
-            folder,
-            key=FolderView.GetComparer)
-        waitFrame = WaitFrame(
-            master=self._foldervw,
-            wait_gif=self._GIF_WAIT,
-            cancel_callback=self._LoadFolder_cancel)
-        afterID = self.after(
-            self._TIME_OPERATIONS,
-            self._LoadFolder_after)
-        self._loadingFolder = LoadingFolderAfterInfo(
-            future,
-            afterID,
-            folder,
-            waitFrame)
-        self._loadingFolder.waitFrame.Show()
-    
-    def _LoadFolder_after(self) -> None:
-        if self._loadingFolder.future.done():
-            self._loadingFolder.waitFrame.Close()
-            try:
-                folderInfo = self._loadingFolder.future.result()
-                # Populating the FolderView...
-                self._foldervw.AddFilenames(
-                    folderInfo.folder,
-                    folderInfo.mp3s,
-                    folderInfo.selectIdx)
-            finally:
-                del self._loadingFolder
-                self._loadingFolder = None
+    def _CheckAudioInPlaylist(self) -> None:
+        """Checks existence of `_lastAudio` in the `_playlist`."""
+        if self._lastAudio is None:
+            # No audio, doing nothing...
+            return
+        indices = self._playlist.GetIndices(self._lastAudio)
+        nIndices = len(indices)
+        if nIndices == 0:
+            msg = f"'{self._lastAudio}' did not find in " \
+                f"'{self._playlist.Path}'"
+            self._msgvw.AddMessage(
+                title='Missing audio',
+                message=msg,
+                type=MessageType.ERROR)
+        elif nIndices > 1:
+            msg = f"{nIndices} audio with the name of'{self._lastAudio}'" \
+                f"was found in '{self._playlist.Path}'"
+            self._msgvw.AddMessage(
+                title='Duplicate audio',
+                message=msg,
+                type=MessageType.ERROR)
         else:
-            self._loadingFolder.afterID = self.after(
-                self._TIME_OPERATIONS,
-                self._LoadFolder_after)
+            self._plyvw.SelectItem(indices[0])
     
-    def _LoadFolder_cancel(self) -> None:
-        self._loadingFolder.future.cancel()
-        self.after_cancel(self._loadingFolder.afterID)
-        self.after(
-            self._TIME_OPERATIONS,
-            self._LoadFolder_cancel_after)
+    def _LoadAudio(self, idx: int) -> None:
+        """Loads `idx`th audio from the playlist into the GUI. This
+        function is called whenever an item in the playlist is
+        selected.
+        """
+        self._lastAudio = self._playlist.GetAudio(idx)
+        audio_file = self._playlist.GetFullPath(idx)
+        self._LoadLrc(audio_file)
     
-    def _LoadFolder_cancel_after(self) -> None:
-        if not self._loadingFolder.future.cancelled():
-            self.after(
-                self._TIME_OPERATIONS,
-                self._LoadFolder_cancel_after)
+    def _LoadLrc(self, lrc_file: PathLike) -> None:
+        """Loads LRC file into the GUI. `lrc_file` is the full path of
+        the LRC file in the file system.
+        """
+        from functools import partial
+        from utils.ops import LoadLrc
+        if self._mp3 and self._lrcedt.HasChanged():
+            toSave = askyesno(
+                title='Unsaved lyrics',
+                message='Do you want to save/create the lyrics?')
+            if toSave:
+                self._SaveCreateLrc()
+        self._afterManager.InitiateOp(
+            start_cb=partial(LoadLrc, lrc_file),
+            finish_cb=self._OnLrcLoaded)
+
+    def _OnLrcLoaded(self, future: Future[Lrc]) -> None:
+        """This callback must be fired whenever an LRC object is loaded."""
+        try:
+            self._lrc = future.result()
+        except FileNotFoundError:
+            self._msgvw.AddMessage(
+                title='No LRC',
+                message=f"No LRC file was found for '{self._lastAudio}'",
+                type=MessageType.ERROR)
         else:
-            self._loadingFolder.waitFrame.Close()
-            del self._loadingFolder
-            self._loadingFolder = None
+            self._lrcvw.Populate(self._lrc)
+            self._lrcedt.Populate(self._lrc)
+            self._infovw.PopulateLrcInfo(self._lrc)
+            # Adding a message if necessary...
+            if self._lrc and self._lrc.errors:
+                message = [
+                    str(idx) + '. ' + error
+                    for idx, error in enumerate(self._lrc.GetErrors(), 1)]
+                message.insert(0, self._lrc.filename + '\n')
+                self._msgvw.AddMessage(
+                    title='LRC error',
+                    message='\n'.join(message),
+                    type=MessageType.WARNING)
+            #self._UpdateGui_Lrc()
     
-    def _LoadLrc(self, mp3File: str, toCreate: bool = False) -> None:
+    def _LoadLrc_(self, mp3File: str, toCreate: bool = False) -> None:
         """Loads the LRC file associated with the specified MP3 file. The
         optional toCreate parameter specifies whether to create the LRC file
         in the case that it does not exist.
@@ -895,11 +892,11 @@ class Mp3LyricsWin(tk.Tk):
             vwWaitFrame = WaitFrame(
                 master=self._lrcvw,
                 wait_gif=self._GIF_WAIT,
-                cancel_callback=self._LoadLrc_cancel)
+                cancel_cb=self._LoadLrc_cancel)
             edtWaitFrame = WaitFrame(
                 master=self._lrcedt,
                 wait_gif=self._GIF_WAIT,
-                cancel_callback=self._LoadLrc_cancel)
+                cancel_cb=self._LoadLrc_cancel)
             afterID = self.after(
                 self._TIME_OPERATIONS,
                 self._LoadLrc_after)
@@ -1129,14 +1126,14 @@ class Mp3LyricsWin(tk.Tk):
                 self._SyncPTSlider)
     
     def _ReadSettings(self) -> None:
-        # Considering Duplicate Finder Window (DFW) default settings...
+        # Considering MP3 Lyrics Window (MLW) default settings...
         defaults = {
             'MLW_WIDTH': 900,
             'MLW_HEIGHT': 600,
             'MLW_X': 200,
             'MLW_Y': 200,
             'MLW_STATE': 'normal',
-            'MLW_LAST_FILE': None,
+            'MLW_LAST_FILE': Path('res/Tarantella abballa abballa.mp3'),
             'MLW_PLAYLIST_PATH': Path('.'),
             'MLW_VOLUME': 5.0,
             'MLW_TS_COL_WIDTH': 150,
@@ -1146,7 +1143,7 @@ class Mp3LyricsWin(tk.Tk):
             'MLW_LRC_VIEW_WIDTH': 200,}
         return AppSettings().Read(defaults)
 
-    def _OnClosingWin(self) -> None:
+    def _OnWinClosing(self) -> None:
         # Closing the MP3 file...
         if self._mp3:
             self._mp3.Close()
@@ -1196,6 +1193,7 @@ class Mp3LyricsWin(tk.Tk):
         self._HIMG_MP3.close()
         self._HIMG_PAUSE.close()
         self._HIMG_PLAY.close()
+        del self._GIF_WAIT
 
         self.destroy()
     
@@ -1207,8 +1205,26 @@ class Mp3LyricsWin(tk.Tk):
     
     def _SetB(self) -> None:
         self._abvw.b = self.pos
+    
+    def _SaveCreateLrc(self) -> None:
+        """Saves the LRC or creates an LRC object."""
+        if self._lrcedt.HasChanged():
+            if self._mp3 and not self._lrc:
+                lrcFilename = Lrc.GetLrcFilename(self._mp3.Filename)
+                Lrc.CreateLrc(lrcFilename)
+                self._lrc = Lrc(lrcFilename, True, True)
+            self._lrc.lyrics = self._lrcedt.GetAllLyricsItems()
+            self._lrc['by'] = 'https://twitter.com/megacodist'
+            self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
+            self._lrc.Save()
+            self._UpdateGui_Lrc()
+        else:
+            self._msgvw.AddMessage(
+                title='Save/create command',
+                message='No change has been made in the editor.',
+                type=MessageType.INFO)
 
-    def _SaveLrc(self) -> None:
+    """def _SaveLrc(self) -> None:
         if self._lrc:
             self._lrcedt.ApplyLyrics()
             if self._lrc.changed:
@@ -1228,7 +1244,7 @@ class Mp3LyricsWin(tk.Tk):
         else:
             self._LoadLrc(
                 self._lastAudio,
-                toCreate=self._lrcLoaded)
+                toCreate=self._lrcLoaded)"""
     
     def _DeleteLrc(self) -> None:
         # Insert code here to delete the LRC file...

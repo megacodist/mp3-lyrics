@@ -15,29 +15,33 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
-from typing import Any, Callable
-
-import attrs
-from tkinterweb import HtmlFrame
+from typing import Any, Callable, Iterable
 
 
 class PlaylistItem:
-    """Objects of this class represent audio items in a `PlaylistView`
+    """Objects of this class represent items in a `PlaylistView`
     widget.
     """
-    def __init__(self) -> None:
-        self.filename: Path | None = None
-        """The path of the audio in the playlist."""
-        self.tags: dict[str, list[str]]
+    def __init__(
+            self,
+            name: str,
+            tags: dict[str, Iterable[str]] | None = None
+            ) -> None:
+        self.name = name
+        """The name of the item in the playlist."""
+        self.tags: dict[str, Iterable[str]] = tags
+        """The key-values pairs of this playlist view item."""
     
     def __del__(self) -> None:
-        del self.filename
+        del self.name
         del self.tags
 
 
 class _PlvwItem(tk.Frame):
     FILE_FONT: tkfont.Font
     """The font of the file name label."""
+    TAG_COLOR = 'grey'
+    """The color of the tag in the item."""
 
     """Represents a playlist view item."""
     def __init__(
@@ -49,6 +53,7 @@ class _PlvwItem(tk.Frame):
             **kwargs
             ) -> None:
         kwargs['cursor'] = 'hand1'
+        kwargs['borderwidth'] = 2
         super().__init__(master, **kwargs)
         self._idx = idx
         """The index of this playlist view item in the playlist view."""
@@ -110,85 +115,58 @@ class _PlvwItem(tk.Frame):
     def _InitGui(self) -> None:
         self.columnconfigure(1, weight=1)
         self.rowconfigure(1, weight=1)
-        #
+        # Adding name...
         try:
-            self._lbl_filename = tk.Label(
+            self._lbl_name = tk.Label(
                 self,
                 font=_PlvwItem.FILE_FONT,
-                text=str(self._item.filename))
+                text=str(self._item.name))
         except AttributeError:
             _PlvwItem.FILE_FONT = tkfont.nametofont('TkDefaultFont').copy()
             _PlvwItem.FILE_FONT.config(weight='bold')
             _PlvwItem.FILE_FONT.config(
                 size=_PlvwItem.FILE_FONT.cget('size') + 1)
-            self._lbl_filename = tk.Label(
+            self._lbl_name = tk.Label(
                 self,
                 font=_PlvwItem.FILE_FONT,
-                text=str(self._item.filename))
-        self._lbl_filename.grid(
+                text=str(self._item.name))
+        self._lbl_name.bind("<Button-1>", self._OnMouseClicked)
+        self._lbl_name.grid(
             row=0,
             column=0,
             columnspan=2,
             sticky=tk.W)
+        # Adding key-value pairs...
         row = 0
-        # Adding title...
-        if 'TIT2' in self._item.tags:
+        for key in self._item.tags:
             row += 1
-            tagTitle = ttk.Label(self, text='Title:', foreground='grey')
-            tagTitle.grid(
+            # Adding tag label...
+            lblTag = ttk.Label(
+                self,
+                text=(key + ':'),
+                foreground=_PlvwItem.TAG_COLOR)
+            lblTag.bind("<Button-1>", self._OnMouseClicked)
+            lblTag.grid(
                 row=row,
                 column=0,
                 sticky=tk.NE)
-            tagValues = ttk.Label(self)
+            # Adding values label...
+            lblValues = ttk.Label(self)
             try:
-                tagValues['text'] = '\n'.join(self._item.tags['TIT2'])
+                lblValues['text'] = '\n'.join(self._item.tags[key])
             except TypeError:
-                tagValues['text'] = '\n'.join(
-                    str(value) for value in self._item.tags['TIT2'])
-            tagValues.grid(
+                lblValues['text'] = '\n'.join(
+                    str(value) for value in self._item.tags[key])
+            lblValues.bind("<Button-1>", self._OnMouseClicked)
+            lblValues.grid(
                 row=row,
                 column=1,
                 sticky=tk.NW)
-        # Adding album...
-        if 'TALB' in self._item.tags:
-            row += 1
-            tagTitle = ttk.Label(self, text='Album:', foreground='grey')
-            tagTitle.grid(
-                row=row,
-                column=0,
-                sticky=tk.NE)
-            tagValues = ttk.Label(self)
-            try:
-                tagValues['text'] = '\n'.join(self._item.tags['TALB'])
-            except TypeError:
-                tagValues['text'] = '\n'.join(
-                    str(value) for value in self._item.tags['TALB'])
-            tagValues.grid(
-                row=row,
-                column=1,
-                sticky=tk.NW)
-        # Adding artist...
-        if 'TPE1' in self._item.tags:
-            row += 1
-            tagTitle = ttk.Label(self, text='Artist:', foreground='grey')
-            tagTitle.grid(
-                row=row,
-                column=0,
-                sticky=tk.NE)
-            tagValues = ttk.Label(self)
-            try:
-                tagValues['text'] = '\n'.join(self._item.tags['TPE1'])
-            except TypeError:
-                tagValues['text'] = '\n'.join(
-                    str(value) for value in self._item.tags['TPE1'])
-            tagValues.grid(
-                row=row,
-                column=1,
-                sticky=tk.NW)
-    
+
     def __del__(self) -> None:
         del self._idx
         del self._selectCb
+        del self._selected
         del self._item
 
 
@@ -260,7 +238,7 @@ class PlaylistView(tk.Frame):
                 self._frame,
                 0,
                 items[0],
-                self.Select)
+                self.SelectItem)
             plvwItem.pack(
                 side=tk.TOP,
                 fill=tk.X,
@@ -278,7 +256,7 @@ class PlaylistView(tk.Frame):
                 self._frame,
                 idx,
                 items[idx],
-                self.Select)
+                self.SelectItem)
             plvwItem.pack(
                 side=tk.TOP,
                 fill=tk.X,
@@ -292,64 +270,83 @@ class PlaylistView(tk.Frame):
             self._frame.winfo_reqwidth(),
             self._frame.winfo_reqheight())
 
-    def Select(self, idx: int) -> None:
+    def SelectItem(self, idx: int) -> None:
+        """Selects the `idx`th item in the playlist view."""
         if isinstance(self._selected, int):
             self._plvwItems[self._selected].Selected = False
         self._selected = idx
         self._plvwItems[idx].Selected = True
+        # Checking visibility of the playlist view item...
+        if not self._IsVisible(idx):
+            self._ScrollTo(idx)
         self._selectCb(idx)
+    
+    def _IsVisible(self, idx: int) -> bool:
+        """Checks whether `idx`th item in this playlist view is visible
+        in this playlist view widget or not.
+        """
+        self._plvwItems[idx].update_idletasks()
+        itemY0 = self._plvwItems[idx].winfo_y()
+        itemY1 = itemY0 + self._plvwItems[idx].winfo_reqheight()
+        self._cnvs.update_idletasks()
+        cnvsY0 = self._cnvs.canvasy(0)
+        cnvsY1 = self._cnvs.canvasy(self._cnvs.winfo_reqheight())
+        return (cnvsY0 <= itemY0 <= cnvsY1) or (cnvsY0 <= itemY1 <= cnvsY1)
+    
+    def _ScrollTo(self, idx: int) -> None:
+        """Scrolls the canvas so that `idx`th item will be in the middle
+        of the visible region.
+        """
+        # Declaring variables -----------------------------
+        # The height of the canvas
+        cnvsH: int
+        # The height of the scrollable region of the canvas
+        cnvsSRH: int
+        # The vertical position of the item in the canvas
+        itemY: int
+        # The height of the item in the canvas
+        itemH: int
+        fraction: float
+        # Scrolling ---------------------------------------
+        self._cnvs.update_idletasks()
+        cnvsH = self._cnvs.winfo_height()
+        cnvsSRH = int(self._cnvs['scrollregion'].split()[3])
+        self._plvwItems[idx].update_idletasks()
+        itemY = self._plvwItems[idx].winfo_y()
+        itemH = self._cnvs.winfo_height()
+        if itemH >= cnvsH:
+            fraction = itemY / cnvsSRH
+        else:
+            fraction = (itemY + (cnvsH - itemH) / 2) / cnvsSRH
+        self._cnvs.yview_moveto(fraction)
+        """self._cnvs.update_idletasks()
+        midyTop = self._cnvs.winfo_height() // 2
+        self._plvwItems[idx].update_idletasks()
+        midyItem = self._plvwItems[idx].winfo_y() + \
+            self._plvwItems[idx].winfo_height() // 2
+        scrlHeight = int(self._cnvs['scrollregion'].split()[3]) - \
+            self._cnvs.winfo_height()
+        yscrl = (midyItem - midyTop) / scrlHeight
+        yscrl = 0 if yscrl < 0 else 1 if yscrl > 1 else yscrl
+        a = self._plvwItems[idx].winfo_y()
+        b = int(self._cnvs['scrollregion'].split()[3])
+        self._cnvs.yview_moveto(a / b)
+        #self._cnvs.yview_moveto(yscrl)
+        midyItem = self._plvwItems[idx].winfo_y() + \
+            self._plvwItems[idx].winfo_height() / 2
+        midyHeight = int(self._cnvs['scrollregion'].split()[3])
+        self._cnvs.yview_moveto(midyItem / midyHeight)"""
+    
+    def _GetVisibleRegion(self) -> tuple[int, int, int, int]:
+        """Returns `(x0, y0, x1, y1)` where region between `(x0, y0)`
+        and `(x1, y1)` is visible in this scrollable widget.
+        """
+        x0 = self._cnvs.canvasx(0)
+        y0 = self._cnvs.canvasy(0)
+        x1 = self._cnvs.canvasx(self._cnvs.winfo_width())
+        y1 = self._cnvs.canvasy(self._cnvs.winfo_height())
+        return (x0, y0, x1, y1)
 
     def __del__(self) -> None:
         del self._margin
         del self._selectCb
-
-
-class PlaylistView_old(tk.Frame):
-    def __init__(
-            self,
-            master: tk.Misc,
-            template_dir: Path,
-            template_name: str,
-            **kwargs,
-            ) -> None:
-        super().__init__(master, **kwargs)
-        self._templateDir = template_dir
-        """The directory of templates."""
-        self._templateName = template_name
-        """The name of the template."""
-        self._items: list[PlaylistItem] = []
-        self._InitGui()
-    
-    def _InitGui(self) -> None:
-        #
-        self._htmlFrame = HtmlFrame(
-            self,
-            vertical_scrollbar=True,
-            horizontal_scrollbar=True,
-            messages_enabled=False,)
-        self._htmlFrame.pack(
-            fill=tk.BOTH,
-            expand=True,)
-    
-    def Populate(self, items: list[PlaylistItem]) -> None:
-        """Firstly clears the `PlaylistView`, then populates the new,
-        provided items in the view."""
-        self._items.cleaself._items = items
-        self._PopulateJinja()
-
-    def Clear(self) -> None:
-        """Clears the `PlaylistView` from all items."""
-        self._items.clear()
-        self._PopulateJinja()
-
-    def _PopulateJinja(self) -> None:
-        # Declaring variables -----------------------------
-        from jinja2 import FileSystemLoader, Environment
-        # Populating --------------------------------------
-        fsLoader = FileSystemLoader(searchpath=self._templateDir)
-        env = Environment(loader=fsLoader)
-        tmplt = env.get_template(name=self._templateName)
-        result_ = tmplt.render(self._items)
-        self._htmlFrame.load_html(
-            html_source=result_,
-            base_url='https://me.me')
