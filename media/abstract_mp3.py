@@ -14,7 +14,7 @@ class MP3NotFoundError(Exception):
     pass
 
 
-class AbstractMP3(ABC):
+class AbstractMp3(ABC):
     """This class consolidate all required functionalities to work with
     MP3 files including properties, metadata, playbak, and also some
     editing capabilities.

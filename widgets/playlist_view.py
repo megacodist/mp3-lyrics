@@ -50,6 +50,7 @@ class _PlvwItem(tk.Frame):
             idx: int,
             item: PlaylistItem,
             select_cb: Callable[[int], Any],
+            hover_color: str = 'white',
             **kwargs
             ) -> None:
         kwargs['cursor'] = 'hand1'
@@ -64,7 +65,10 @@ class _PlvwItem(tk.Frame):
         self._selectCb = select_cb
         """The callback to be called upon selection."""
         self._defaultBack = self['background']
-        self._hoverBack = 'white'
+        self._hoverBack = hover_color
+        """The background color of items when mouse pointer hovers them
+        or when they are selected.
+        """
         self._InitGui()
         self.bind('<Enter>', self._SetBackHover)
         self.bind('<Leave>', self._SetBackDefault)
@@ -179,7 +183,7 @@ class PlaylistView(tk.Frame):
             ) -> None:
         kwargs['name'] = 'playlistView'
         super().__init__(master, **kwargs)
-        self._margin = 10
+        self._margin = 5
         """The margin between items."""
         self._plvwItems: list[_PlvwItem] = []
         """The playlist view items."""
@@ -189,12 +193,17 @@ class PlaylistView(tk.Frame):
         """The callback to be called upon selection."""
         self._frame: ttk.Frame | None = None
         """The frame containing the playlist view items."""
+        self._scrollRegion: tuple[int, int, int, int] = (0, 0, 0, 0)
+        """The scrollable region of this playlist view in the form of
+        (x0, y0, x1, y1) where (x0, y0) is the coordinates of upper left
+        corner of the scrollable region and (x1, y1) is the lower right
+        corner.
+        ."""
         self._InitGui()
     
     def _InitGui(self) -> None:
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-
         #
         self._vscrlbr = ttk.Scrollbar(
             self,
@@ -247,7 +256,7 @@ class PlaylistView(tk.Frame):
         for idx in range(1, len(items)):
             separator = ttk.Separator(self._frame, orient=tk.HORIZONTAL)
             separator.pack(
-                padx=(2 * self._margin),
+                padx=(3 * self._margin),
                 pady=self._margin,
                 side=tk.TOP,
                 fill=tk.X,
@@ -264,11 +273,12 @@ class PlaylistView(tk.Frame):
             self._plvwItems.append(plvwItem)
         self._cnvs.create_window(0, 0, anchor=tk.NW, window=self._frame)
         self._frame.update_idletasks()
-        self._cnvs['scrollregion'] = (
+        self._scrollRegion = (
             0,
             0,
             self._frame.winfo_reqwidth(),
             self._frame.winfo_reqheight())
+        self._cnvs['scrollregion'] = self._scrollRegion
 
     def SelectItem(self, idx: int) -> None:
         """Selects the `idx`th item in the playlist view."""
@@ -310,7 +320,7 @@ class PlaylistView(tk.Frame):
         # Scrolling ---------------------------------------
         self._cnvs.update_idletasks()
         cnvsH = self._cnvs.winfo_height()
-        cnvsSRH = int(self._cnvs['scrollregion'].split()[3])
+        cnvsSRH = self._scrollRegion[3]
         self._plvwItems[idx].update_idletasks()
         itemY = self._plvwItems[idx].winfo_y()
         itemH = self._cnvs.winfo_height()

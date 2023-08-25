@@ -9,14 +9,14 @@ from pygame import USEREVENT as PYGAME_USER_EVENT
 from pygame.event import get as GetPygameEvents
 from pygame.mixer import music  as PygameMusic
 
-from abstract_mp3_lib import AbstractMP3Info, AbstractMP3Player
+from abstract_mp3_lib import AbstractMp3Info, AbstractMp3Player
 
 
-class MutagenMP3Info(AbstractMP3Info):
+class MutagenMP3Info(AbstractMp3Info):
     pass
 
 
-class PygameMP3Player(AbstractMP3Player):
+class PygameMP3Player(AbstractMp3Player):
     _nInstances = 0
     """Counts number of instances ofthis class"""
 

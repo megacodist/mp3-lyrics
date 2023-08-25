@@ -2,6 +2,11 @@
 # 
 #
 """This mosule offers operations for `mp3_lyrics_win` module.
+
+#### Functions:
+1. `LoadPlaylist`
+2. `LoadLrc`
+3. `LoadAudio`
 """
 
 from collections import OrderedDict
@@ -13,6 +18,7 @@ from typing import Callable, Iterable
 
 from media import AbstractPlaylist
 from media.lrc import Lrc
+from media.abstract_mp3 import AbstractMp3
 from widgets.playlist_view import PlaylistItem
 
 
@@ -71,3 +77,13 @@ def LoadLrc(lrc_file: PathLike, q: Queue | None) -> Lrc:
         q.put(f'Loading\n{lrc_file}')
     lrc_file = Lrc.GetLrcFilename(lrc_file)
     return Lrc(lrc_file, True, True)
+
+
+def LoadAudio(
+        audio_file: PathLike,
+        mp3_class: type[AbstractMp3],
+        q: Queue | None,
+        ) -> AbstractMp3:
+    if q:
+        q.put(f'Loading audio\n{audio_file}')
+    return mp3_class(audio_file)

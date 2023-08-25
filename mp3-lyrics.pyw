@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from typing import Type
 
-from media.abstract_mp3 import AbstractMP3
+from media.abstract_mp3 import AbstractMp3
 from asyncio_thrd import AsyncioThrd
 try:
     import mp3
@@ -34,15 +34,15 @@ if __name__ == '__main__':
     # Finding & loading implementations of MP3 library...
     mp3LibStuff = dir(mp3)
     # Looking for the MP3 implementation...
-    mp3Class: Type[AbstractMP3] | None = None
+    mp3Class: Type[AbstractMp3] | None = None
     for item in mp3LibStuff:
         item = getattr(mp3, item)
-        if issubclass(item, AbstractMP3):
+        if issubclass(item, AbstractMp3):
             if not isabstract(item):
                 mp3Class = item
                 break
     else:
-        msg_noAbsImpl = "Invalid 'mp3.py', no AbstractMP3 implementation"
+        msg_noAbsImpl = "Invalid 'mp3.py', no AbstractMp3 implementation"
         sys.stderr.write(msg_noAbsImpl)
         logging.critical(msg_noAbsImpl)
         sys.exit(1)

@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Mapping
 
-from media.abstract_mp3 import AbstractMP3
+from media.abstract_mp3 import AbstractMp3
 from media.lrc import Lrc
 
 
@@ -23,7 +23,7 @@ class InfoView(ttk.Frame):
         super().__init__(master, **kwargs)
 
         self._filename: str | Path | None = None
-        self._mp3: AbstractMP3 | None = None
+        self._mp3: AbstractMp3 | None = None
         self._lrc: Lrc | None = None
 
         self._InitGui()
@@ -94,6 +94,21 @@ class InfoView(ttk.Frame):
             open=True)
         self._iids_streams: list[str] = []
     
+    def Clear(self) -> None:
+        """Clears all the information in this info view."""
+        for child in self._trvw.get_children(self._iid_fileProp):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iid_lrcErrors):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iid_lrcTags):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iid_mp3Info):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iid_mp3Tags):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iids_streams):
+            self._trvw.delete(child)
+    
     def PopulateFileInfo(self, __filename: str | Path, /) -> None:
         # Saving the MP3Info object...
         self._filename = __filename
@@ -101,7 +116,7 @@ class InfoView(ttk.Frame):
         for item in self._trvw.get_children(self._iid_fileProp):
             self._trvw.delete(item)
 
-    def PopulateMp3Info(self, __mp3Info: AbstractMP3, /) -> None:
+    def PopulateMp3Info(self, __mp3Info: AbstractMp3, /) -> None:
         # Saving the MP3Info object...
         self._mp3 = __mp3Info
         # Clearing 'MP3 information' item...
@@ -215,7 +230,7 @@ class InfoView_old(ttk.Frame):
         self._sepLineWidth = sepLineWidth
         self._subitemIndent = subitemIndent
         self._lrc: Lrc | None = None
-        self._mp3: AbstractMP3 | None = None
+        self._mp3: AbstractMp3 | None = None
 
         self._InitGui()
 
@@ -375,7 +390,7 @@ class InfoView_old(ttk.Frame):
     def PopulateFile(self) -> None:
         pass
 
-    def PopulateMp3(self, __mp3: AbstractMP3, /) -> None:
+    def PopulateMp3(self, __mp3: AbstractMp3, /) -> None:
         self._mp3 = __mp3
         # Clearing previous infos...
         for widget in self._frm_mp3Info.winfo_children():

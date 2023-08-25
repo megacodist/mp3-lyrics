@@ -15,11 +15,11 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from media.abstract_mp3 import AbstractMP3, MP3NotFoundError
+from media.abstract_mp3 import AbstractMp3, MP3NotFoundError
 
 
-class FFmpegMP3(AbstractMP3):
-    """Implements AbstractMP3Info by using FFmpeg project."""
+class FFmpegMP3(AbstractMp3):
+    """Implements AbstractMp3Info by using FFmpeg project."""
     def __init__(
             self,
             filename: str | Path,

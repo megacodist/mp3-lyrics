@@ -11,7 +11,7 @@ from queue import Queue, Empty
 from threading import RLock
 import tkinter as tk
 from tkinter import ttk
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, TypeVar
 
 from utils.types import GifImage
 
@@ -26,6 +26,8 @@ class AfterOpStatus(enum.IntEnum):
     CANCELED = 3
     """The operation was canceled."""
 
+
+_ReturnType = TypeVar('_ReturnType')
 
 class _AfterOp:
     """Represents a asynchronous (on another thread) operation which
@@ -53,8 +55,8 @@ class _AfterOp:
             self,
             thrd_pool: ThreadPoolExecutor,
             q: Queue | None,
-            start_cb: Callable[[Queue | None], Any],
-            finish_cb: Callable[[Any], None] | None = None,
+            start_cb: Callable[[Queue | None], _ReturnType],
+            finish_cb: Callable[[Future[_ReturnType]], None] | None = None,
             cancel_cb: Callable[[], None] | None = None,
             widgets: Iterable[tk.Widget] = (),
             ) -> None:
@@ -162,12 +164,25 @@ class AfterOpManager:
 
     def InitiateOp(
             self,
-            start_cb: Callable[[Queue | None], Any],
-            finish_cb: Callable[[Any], None] | None = None,
+            start_cb: Callable[[Queue | None], _ReturnType],
+            finish_cb: Callable[[Future[_ReturnType]], None] | None = None,
             cancel_cb: Callable[[], None] | None = None,
             widgets: Iterable[tk.Widget] = (),
             ) -> None:
-        """Initiates an `after` operation."""
+        """Initiates an `after` operation. Arguments are as follow:
+
+        * `start_cb`: Necessary. The callback that actually performs the
+        asynchronous operation. If no widget is provided, this callback
+        receives `None`; otherwise it receives a `queue.Queue` object.
+        * `finish_cb`: Optional. The callback to be called upon
+        completion. It must receives a `Future` object resolving to
+        the output of the `start_cb` callback.
+        * `cancel_cb`: Optional. The callback to be called upon
+        cancelation of the operation.
+        * `widgets`: an iterable of widgets that this operation might
+        have an effect on them. If this parameter is falsy (`None` or
+        empty), `start_cb` receives `None` instead of `queue.Queue`.
+        """
         # Making assets for all the involving widgets...
         for widget in widgets:
             try:
@@ -200,10 +215,11 @@ class AfterOpManager:
         finishedOps: set[_AfterOp] = set()
         canceledOps: set[_AfterOp] = set()
         for afterOp in self._afterOps:
-            if afterOp.HasDone():
+            if afterOp.HasCanceled():
                 finishedOps.add(afterOp)
-            elif afterOp.HasCanceled():
+            elif afterOp.HasDone():
                 finishedOps.add(afterOp)
+                
         if finishedOps:
             for afterOp in finishedOps:
                 afterOp._status = AfterOpStatus.FINISHED
