@@ -67,7 +67,7 @@ class InfoView(ttk.Frame):
         self._trvw.heading('#1', anchor=tk.W)
 
         #
-        self._iid_fileProp = self._trvw.insert(
+        self._iid_fileInfo = self._trvw.insert(
             '',
             index='end',
             text='File properties',
@@ -96,7 +96,7 @@ class InfoView(ttk.Frame):
     
     def Clear(self) -> None:
         """Clears all the information in this info view."""
-        for child in self._trvw.get_children(self._iid_fileProp):
+        for child in self._trvw.get_children(self._iid_fileInfo):
             self._trvw.delete(child)
         for child in self._trvw.get_children(self._iid_lrcErrors):
             self._trvw.delete(child)
@@ -109,11 +109,32 @@ class InfoView(ttk.Frame):
         for child in self._trvw.get_children(self._iids_streams):
             self._trvw.delete(child)
     
+    def ClearFileInfo(self) -> None:
+        """Clears file information from the info view."""
+        for child in self._trvw.get_children(self._iid_fileInfo):
+            self._trvw.delete(child)
+
+    def ClearMp3Info(self) -> None:
+        """Clears MP3 information from the info view."""
+        for child in self._trvw.get_children(self._iid_mp3Info):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iid_mp3Tags):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iids_streams):
+            self._trvw.delete(child)
+
+    def ClearLrcInfo(self) -> None:
+        """Clears lyrics information from the info view."""
+        for child in self._trvw.get_children(self._iid_lrcErrors):
+            self._trvw.delete(child)
+        for child in self._trvw.get_children(self._iid_lrcTags):
+            self._trvw.delete(child)
+    
     def PopulateFileInfo(self, __filename: str | Path, /) -> None:
         # Saving the MP3Info object...
         self._filename = __filename
         # Clearing 'MP3 information' item...
-        for item in self._trvw.get_children(self._iid_fileProp):
+        for item in self._trvw.get_children(self._iid_fileInfo):
             self._trvw.delete(item)
 
     def PopulateMp3Info(self, __mp3Info: AbstractMp3, /) -> None:
@@ -212,221 +233,3 @@ class InfoView(ttk.Frame):
                 index='end',
                 text=tag,
                 values=(value,))
-
-
-
-class InfoView_old(ttk.Frame):
-    def __init__(
-            self,
-            master: tk.Tk,
-            gap: int = 12,
-            sepLineWidth = 1,
-            subitemIndent = 12,
-            **kwargs) -> None:
-
-        super().__init__(master, **kwargs)
-
-        self._gap: int = gap
-        self._sepLineWidth = sepLineWidth
-        self._subitemIndent = subitemIndent
-        self._lrc: Lrc | None = None
-        self._mp3: AbstractMp3 | None = None
-
-        self._InitGui()
-
-        self._cnvs.bind('<Configure>', self._Redraw)
-        self._cnvs.bind('<Map>', self._Redraw)
-    
-    def _InitGui(self) -> None:
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-
-        #
-        self._vscrlbr = ttk.Scrollbar(
-            self,
-            orient=tk.VERTICAL)
-        self._cnvs = tk.Canvas(
-            self,
-            yscrollcommand=self._vscrlbr.set)
-        self._vscrlbr['command'] = self._cnvs.yview
-        self._cnvs.grid(
-            column=0,
-            row=0,
-            padx=5,
-            pady=5,
-            sticky=tk.NSEW)
-        self._vscrlbr.grid(
-            column=1,
-            row=0,
-            sticky=tk.NSEW)
-        
-        #
-        self._msg_fileInfoTitle = tk.Message(
-            self._cnvs,
-            text='File properties',
-            padx=0,
-            pady=0,
-            justify=tk.LEFT)
-        
-        #
-        self._msg_mp3InfoTitle = tk.Message(
-            self._cnvs,
-            text='MP3 information',
-            padx=0,
-            pady=0,
-            justify=tk.LEFT)
-        
-        #
-        self._frm_mp3Info = ttk.Frame(
-            self._cnvs)
-        
-        #
-        self._msg_mp3InfoKeys = tk.Message(
-            self._cnvs,
-            text='No MP3 info',
-            justify=tk.RIGHT)
-        
-        #
-        self._msg_mp3InfoValues = tk.Message(
-            self._cnvs,
-            text='',
-            justify=tk.LEFT)
-        
-        #
-        self._msg_lrcInfoTitle = tk.Message(
-            self._cnvs,
-            text='LRC informations',
-            padx=0,
-            pady=0,
-            justify=tk.LEFT)
-        
-        self._Redraw()
-    
-    def _GetWidth(self) -> int:
-        self._cnvs.update_idletasks()
-        return (
-            self._cnvs.winfo_width()
-            - 4
-            + (int(self._cnvs['bd']) << 1))
-    
-    def _GetHeight(self) -> int:
-        self._cnvs.update_idletasks()
-        return (
-            self._cnvs.winfo_height()
-            - 4
-            + (int(self._cnvs['bd']) << 1))
-    
-    def _Redraw(self, event: tk.Event | None = None) -> None:
-        cnvsWidth = self._GetWidth()
-        cnvsHeight = self._GetHeight()
-
-        self._cnvs.delete('all')
-        self._cnvs.update_idletasks()
-
-        # Drawing MP3 info title...
-        y = self._gap
-        self._cnvs.create_line(
-            0,
-            y,
-            cnvsWidth,
-            y,
-            width=self._sepLineWidth)
-        y += self._sepLineWidth
-        self._msg_mp3InfoTitle['width'] = cnvsWidth
-        self._cnvs.create_window(
-            0,
-            y,
-            anchor=tk.NW,
-            window=self._msg_mp3InfoTitle)
-        y += self._msg_mp3InfoTitle.winfo_height()
-        self._cnvs.create_line(
-            0,
-            y,
-            cnvsWidth,
-            y,
-            width=self._sepLineWidth)
-        y += self._sepLineWidth
-
-        # Darwing MP3 info pairs...
-        self._frm_mp3Info['width'] = round(cnvsWidth * 0.8)
-        self._cnvs.create_window(
-            cnvsWidth >> 1,
-            y,
-            anchor=tk.N,
-            window=self._frm_mp3Info)
-        '''self._cnvs.create_window(
-            self._subitemIndent + self._msg_mp3InfoKeys.winfo_width(),
-            y,
-            anchor=tk.NW,
-            window=self._msg_mp3InfoValues)'''
-        y += (self._msg_mp3InfoValues.winfo_height() + self._gap)
-
-        # Drawing _msg_lrcInfoTitle...
-        y += self._gap
-        self._cnvs.create_line(
-            0,
-            y,
-            cnvsWidth,
-            y,
-            width=self._sepLineWidth)
-        y += self._sepLineWidth
-        self._msg_lrcInfoTitle['width'] = cnvsWidth
-        self._cnvs.create_window(
-            0,
-            y,
-            anchor=tk.NW,
-            window=self._msg_lrcInfoTitle)
-        y += self._msg_lrcInfoTitle.winfo_height()
-        self._cnvs.create_line(
-            0,
-            y,
-            cnvsWidth,
-            y,
-            width=self._sepLineWidth)
-        y += self._sepLineWidth
-
-        self._cnvs['scrollregion'] = (0, 0, cnvsWidth, y)
-    
-    def PopulateFile(self) -> None:
-        pass
-
-    def PopulateMp3(self, __mp3: AbstractMp3, /) -> None:
-        self._mp3 = __mp3
-        # Clearing previous infos...
-        for widget in self._frm_mp3Info.winfo_children():
-            widget.destroy()
-        self._frm_mp3Info['width'] = self._cnvs.winfo_width()
-        # Populating new MP3 infos...
-        idx = 0
-        if self._mp3.Duration is not None:
-            msg = tk.Message(
-                self._frm_mp3Info,
-                text='Duration',
-                justify=tk.RIGHT)
-            msg.grid(
-                column=0,
-                row=idx,
-                sticky=tk.W)
-            duration = timedelta(seconds=self._mp3.Duration)
-            msg = tk.Message(
-                self._frm_mp3Info,
-                text=str(duration),
-                justify=tk.LEFT)
-            msg.grid(
-                column=1,
-                row=idx,
-                sticky=tk.E)
-        self._msg_mp3InfoKeys['text'] = 'Duration'
-        self._msg_mp3InfoValues['text'] = str(self._mp3.Duration)
-        self._msg_mp3InfoKeys['text'] += '\nBitRate'
-        self._msg_mp3InfoValues['text'] += f'\n{self._mp3.BitRate}'
-        self._msg_mp3InfoKeys['text'] += '\nEncoder'
-        self._msg_mp3InfoValues['text'] += f'\n{self._mp3.Encoder}'
-        self._Redraw()
-    
-    def PopulateLrc(self, lrc: Lrc) -> None:
-        self._lrc = lrc
-        '''self._txt_lrc.delete('1.0', 'end')
-        if lrc:
-            self._txt_lrc.insert('1.0', repr(self._lrc)) '''  
-        self._Redraw()         

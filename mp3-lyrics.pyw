@@ -59,11 +59,11 @@ if __name__ == '__main__':
     asyncioThrd.start()
 
     # running the application...
-    mp3TagsWin = Mp3LyricsWin(
+    mp3LyricsWin = Mp3LyricsWin(
         res_dir=_APP_DIR / 'res',
         asyncio_thrd=asyncioThrd,
         mp3_class=mp3Class)
-    mp3TagsWin.mainloop()
+    mp3LyricsWin.mainloop()
 
     # Finalizing...
     AppSettings().Save()

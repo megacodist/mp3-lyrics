@@ -11,7 +11,6 @@
 """
 
 
-from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
@@ -198,7 +197,7 @@ class PlaylistView(tk.Frame):
         (x0, y0, x1, y1) where (x0, y0) is the coordinates of upper left
         corner of the scrollable region and (x1, y1) is the lower right
         corner.
-        ."""
+        """
         self._InitGui()
     
     def _InitGui(self) -> None:
@@ -327,25 +326,8 @@ class PlaylistView(tk.Frame):
         if itemH >= cnvsH:
             fraction = itemY / cnvsSRH
         else:
-            fraction = (itemY + (cnvsH - itemH) / 2) / cnvsSRH
+            fraction = (itemY - (cnvsH - itemH) / 2) / cnvsSRH
         self._cnvs.yview_moveto(fraction)
-        """self._cnvs.update_idletasks()
-        midyTop = self._cnvs.winfo_height() // 2
-        self._plvwItems[idx].update_idletasks()
-        midyItem = self._plvwItems[idx].winfo_y() + \
-            self._plvwItems[idx].winfo_height() // 2
-        scrlHeight = int(self._cnvs['scrollregion'].split()[3]) - \
-            self._cnvs.winfo_height()
-        yscrl = (midyItem - midyTop) / scrlHeight
-        yscrl = 0 if yscrl < 0 else 1 if yscrl > 1 else yscrl
-        a = self._plvwItems[idx].winfo_y()
-        b = int(self._cnvs['scrollregion'].split()[3])
-        self._cnvs.yview_moveto(a / b)
-        #self._cnvs.yview_moveto(yscrl)
-        midyItem = self._plvwItems[idx].winfo_y() + \
-            self._plvwItems[idx].winfo_height() / 2
-        midyHeight = int(self._cnvs['scrollregion'].split()[3])
-        self._cnvs.yview_moveto(midyItem / midyHeight)"""
     
     def _GetVisibleRegion(self) -> tuple[int, int, int, int]:
         """Returns `(x0, y0, x1, y1)` where region between `(x0, y0)`

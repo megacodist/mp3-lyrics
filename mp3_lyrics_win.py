@@ -14,7 +14,8 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import askyesno
-from typing import Type
+import tkinter.messagebox as tkmessagebox
+from typing import Any, Type
 
 from megacodist.keyboard import Modifiers, KeyCodes
 import PIL.Image
@@ -29,7 +30,6 @@ from utils.async_ops import AfterOpManager
 from utils.sorted_list import SortedList, CollisionPolicy
 from utils.types import GifImage
 from widgets.ab_view import ABView
-from widgets.folder_view import FolderView
 from widgets.info_view import InfoView
 from widgets.lyrics_editor import LyricsEditor
 from widgets.lyrics_view import LyricsView
@@ -82,7 +82,7 @@ class Mp3LyricsWin(tk.Tk):
         related to this application.
         """
         self._isPlaying: bool = False
-        """Specifies whether the MP3 is playing or not."""
+        """Specifies whether the MP3 is playing right now or not."""
         self._TIME_OPERATIONS = 40
         """Specifies a time interval in millisecond for operations
         methods.
@@ -122,6 +122,7 @@ class Mp3LyricsWin(tk.Tk):
         self._timestamps: SortedList[float] = SortedList(
             cp=CollisionPolicy.END)
         """The timestamps of the loaded LRC files."""
+
         self._IMG_PLAY: PIL.ImageTk.PhotoImage
         self._HIMG_PLAY: PIL.Image.Image
         self._IMG_PAUSE: PIL.ImageTk.PhotoImage
@@ -130,7 +131,12 @@ class Mp3LyricsWin(tk.Tk):
         self._HIMG_VOLUME: PIL.Image.Image
         self._IMG_MP3: PIL.ImageTk.PhotoImage
         self._HIMG_MP3: PIL.Image.Image
+        self._HIMG_CLOSE: PIL.Image.Image
+        self._IMG_CLOSE: PIL.ImageTk.PhotoImage
         self._GIF_WAIT: GifImage
+
+        self._frm_playTime = None
+        """This frame houses time slider & AB view widgets."""
 
         self._LoadRes()
         self._afterManager = AfterOpManager(self, self._GIF_WAIT)
@@ -188,6 +194,11 @@ class Mp3LyricsWin(tk.Tk):
         self._HIMG_MP3 = PIL.Image.open(self._HIMG_MP3)
         self._HIMG_MP3 = self._HIMG_MP3.resize(size=(16, 16,))
         self._IMG_MP3 = PIL.ImageTk.PhotoImage(image=self._HIMG_MP3)
+        # Loading 'close.png...
+        self._HIMG_CLOSE = self._RES_DIR / 'close.png'
+        self._HIMG_CLOSE = PIL.Image.open(self._HIMG_CLOSE)
+        self._HIMG_CLOSE = self._HIMG_CLOSE.resize(size=(16, 16,))
+        self._IMG_CLOSE = PIL.ImageTk.PhotoImage(image=self._HIMG_CLOSE)
         # Loading 'wait.gif...
         self._GIF_WAIT = GifImage(self._RES_DIR / 'wait.gif')
     
@@ -239,7 +250,8 @@ class Mp3LyricsWin(tk.Tk):
         
         #
         self._msgvw = MessageView(
-            master=self._ntbk_infoEvents)
+            self._ntbk_infoEvents,
+            self._IMG_CLOSE)
         self._ntbk_infoEvents.add(
             self._msgvw,
             text='Events')
@@ -727,12 +739,12 @@ class Mp3LyricsWin(tk.Tk):
             self._msgvw.AddMessage(
                 title='File not found',
                 message=f"'{mp3File}' did not found.",
-                type=MessageType.ERROR)
+                type_=MessageType.ERROR)
         except MP3NotFoundError:
             self._msgvw.AddMessage(
                 title='MP3 not found',
                 message=f"'{mp3File}' is not a valid MP3 file.",
-                type=MessageType.ERROR)
+                type_=MessageType.ERROR)
         else:
             self.title(f'{Path(self._lastAudio).name} - MP3 Lyrics')
             self._UpdateGui_Playable()
@@ -775,7 +787,7 @@ class Mp3LyricsWin(tk.Tk):
                 self._msgvw.AddMessage(
                     title='Invalid audio or playlist',
                     message=msg,
-                    type=MessageType.ERROR)
+                    type_=MessageType.ERROR)
             else:
                 self._lastAudio = audio
                 self._LoadPlaylist(pthPlaylist)
@@ -825,14 +837,14 @@ class Mp3LyricsWin(tk.Tk):
             self._msgvw.AddMessage(
                 title='Missing audio',
                 message=msg,
-                type=MessageType.ERROR)
+                type_=MessageType.ERROR)
         elif nIndices > 1:
             msg = f"{nIndices} audio with the name of'{self._lastAudio}'" \
                 f"was found in '{self._playlist.Path}'"
             self._msgvw.AddMessage(
                 title='Duplicate audio',
                 message=msg,
-                type=MessageType.ERROR)
+                type_=MessageType.ERROR)
         else:
             self._plyvw.SelectItem(indices[0])
     
@@ -844,6 +856,10 @@ class Mp3LyricsWin(tk.Tk):
         self._lastAudio = self._playlist.GetAudio(idx)
         audio_file = self._playlist.GetFullPath(idx)
         self._LoadLrc(audio_file)
+        # Loading audio...
+        if self._isPlaying:
+            self._StopPlaying()
+        self._UpdateGui_NotPlayable()
         self._LoadAudio(audio_file)
     
     def _LoadLrc(self, lrc_file: PathLike) -> None:
@@ -852,12 +868,7 @@ class Mp3LyricsWin(tk.Tk):
         """
         from functools import partial
         from utils.ops import LoadLrc
-        if self._mp3 and self._lrcedt.HasChanged():
-            toSave = askyesno(
-                title='Unsaved lyrics',
-                message='Do you want to save/create the lyrics?')
-            if toSave:
-                self._SaveCreateLrc()
+        self._UpdateGui_UnloadLrc()
         self._afterManager.InitiateOp(
             start_cb=partial(LoadLrc, lrc_file),
             finish_cb=self._OnLrcLoaded)
@@ -870,33 +881,10 @@ class Mp3LyricsWin(tk.Tk):
             self._msgvw.AddMessage(
                 title='No LRC',
                 message=f"No LRC file was found for '{self._lastAudio}'",
-                type=MessageType.ERROR)
+                type_=MessageType.ERROR)
         else:
-            # Populating the lyrics view...
-            allLyrics = [li.text for li in self._lrc.lyrics]
-            if self._lrc.AreTimstampsOk():
-                self._lrcvw.Populate(allLyrics, True)
-                self._timestamps.clear()
-                self._timestamps.merge([
-                    lrcItem.timestamp.ToFloat()
-                    for lrcItem in self._lrc.lyrics])
-            else:
-                self._lrcvw.Populate(allLyrics, False)
-            # Populating the lyrics editor...
-            self._lrcedt.Populate(self._lrc.lyrics)
-            # Populating the info view...
-            self._infovw.PopulateLrcInfo(self._lrc)
-            # Adding a message if necessary...
-            if self._lrc.errors:
-                message = [
-                    str(idx) + '. ' + error
-                    for idx, error in enumerate(self._lrc.GetErrors(), 1)]
-                message.insert(0, str(self._lrc.filename) + '\n')
-                self._msgvw.AddMessage(
-                    title='LRC error',
-                    message='\n'.join(message),
-                    type=MessageType.WARNING)
-    
+            self._UpdateGui_Lrc()
+
     def _LoadAudio(self, audio: PathLike) -> None:
         """Loads the specified audio both as an object into `_mp3` and
         into the player as well.
@@ -911,7 +899,15 @@ class Mp3LyricsWin(tk.Tk):
     def _OnAudioLoaded(self, future: Future[AbstractMp3]) -> None:
         self._mp3 = future.result()
         self._InitPlayer()
+        if self._isPlaying:
+            self._mp3.Play()
         self._infovw.PopulateMp3Info(self._mp3)
+    
+    def _LoadFileInfo(self) -> dict[str, Any]:
+        pass
+
+    def _OnFileInfoLoaded(self, future: Future[dict[str, Any]]) -> None:
+        pass
     
     def _MoveMp3To(self, __pos: float, /) -> None:
         """Moves the play-time slider to the specified position
@@ -1131,6 +1127,7 @@ class Mp3LyricsWin(tk.Tk):
         self._HIMG_MP3.close()
         self._HIMG_PAUSE.close()
         self._HIMG_PLAY.close()
+        self._HIMG_CLOSE.close()
         del self._GIF_WAIT
 
         self.destroy()
@@ -1178,7 +1175,7 @@ class Mp3LyricsWin(tk.Tk):
             self._msgvw.AddMessage(
                 title='Save/create command',
                 message='No change has been made in the lyrics editor.',
-                type=MessageType.INFO)
+                type_=MessageType.INFO)
         else:
             print('No MP3 is loaded to save these lyrics for it.')
     
@@ -1198,10 +1195,12 @@ class Mp3LyricsWin(tk.Tk):
         self._LoadLrc(self._lastAudio)
 
     def _UpdateGui_Playable(self) -> None:
+        """Updates GUI in a way to be ready to play the audio."""
         self._btn_palyPause['state'] = tk.NORMAL
         self._menu_mp3Player.entryconfigure(
             'Play/pause',
             state=tk.NORMAL)
+        self._slider_playTime.config(state='enable')
 
     def _UpdateGui_Pausable(self) -> None:
         pass
@@ -1214,36 +1213,42 @@ class Mp3LyricsWin(tk.Tk):
             state=tk.DISABLED)
         self._SetLength(0)
         self.pos = 0
+        self._slider_playTime.config(state='disable')
+    
+    def _UpdateGui_UnloadLrc(self) -> None:
+        if self._mp3 and self._lrcedt.HasChanged():
+            toSave = askyesno(
+                title='Unsaved lyrics',
+                message='Do you want to save/create the lyrics?')
+            if toSave:
+                self._SaveCreateLrc()
+        self._lrcvw.Clear()
         self._lrcedt.ClearContent()
+        self._infovw.ClearLrcInfo()
     
     def _UpdateGui_Lrc(self) -> None:
-        # Setting timestamps...
-        del self._timestamps
-        self._timestamps = SortedList()
-        if self._lrc and self._lrc.AreTimstampsOk():
+        # Populating the lyrics view...
+        allLyrics = [li.text for li in self._lrc.lyrics]
+        self._timestamps.clear()
+        if self._lrc.AreTimstampsOk():
+            self._lrcvw.Populate(allLyrics, True)
             self._timestamps.merge([
                 lrcItem.timestamp.ToFloat()
                 for lrcItem in self._lrc.lyrics])
-    
-        # Populating lyrics widgets...
-        # Populating the LyricsView...
-        self._lrcvw.Populate(self._lrc)
-
+        else:
+            self._lrcvw.Populate(allLyrics, False)
         # Populating the lyrics editor...
-        self._lrcedt.Populate(self._lrc)
-
-        # Populating the InofView...
-        self._infovw.PopulateFileInfo(self._lastAudio)
-        self._infovw.PopulateMp3Info(self._mp3)
+        self._lrcedt.Populate(self._lrc.lyrics)
+        self._lrcedt.SetChangeOrigin()
+        # Populating the info view...
         self._infovw.PopulateLrcInfo(self._lrc)
-
         # Adding a message if necessary...
-        if self._lrc and self._lrc.errors:
+        if self._lrc.errors:
             message = [
                 str(idx) + '. ' + error
                 for idx, error in enumerate(self._lrc.GetErrors(), 1)]
-            message.insert(0, self._lrc.filename + '\n')
+            message.insert(0, str(self._lrc.filename) + '\n')
             self._msgvw.AddMessage(
                 title='LRC error',
                 message='\n'.join(message),
-                type=MessageType.WARNING)
+                type_=MessageType.WARNING)

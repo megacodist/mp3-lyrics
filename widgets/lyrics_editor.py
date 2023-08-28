@@ -9,6 +9,7 @@ import tkinter as tk
 from typing import Iterable
 
 import tksheet
+from tksheet._tksheet_other_classes import SelectRowEvent
 
 from media.lrc import LyricsItem, Timestamp
 
@@ -33,6 +34,9 @@ class LyricsEditor(tksheet.Sheet):
         self.headers([
             'Timestap',
             'Lyrics/text'])
+        self.set_sheet_data([[1, 2], [3, 4]], reset_col_positions=False)
+        #self.set_sheet_data([], reset_col_positions=False)
+        #self.SetChangeOrigin()
         self.enable_bindings(
             'drag_select',
             'single_select',
@@ -42,12 +46,18 @@ class LyricsEditor(tksheet.Sheet):
             'double_click_column_resize',
             'arrowkeys',
             'edit_cell')
+        self.extra_bindings(
+            'row_select',
+            self._OnRowSelection)
+    
+    def _OnRowSelection(self, event: SelectRowEvent) -> None:
+        pass
     
     def SetChangeOrigin(self) -> None:
         """Sets the current status of the editor as the origin for
         chnage comparisons.
         """
-        data = self.get_sheet_data()
+        data: list[LyricsItem] = self.get_sheet_data()
         self._hashCols = self._HashCols(data)
         self._hashRows = self._HashRows(data)
     
@@ -55,7 +65,7 @@ class LyricsEditor(tksheet.Sheet):
         """Determines whether the content of the sheet has changed
         since last origin of change.
         """
-        data = self.get_sheet_data()
+        data: list[LyricsItem] = self.get_sheet_data()
         hashCols = self._HashCols(data)
         hashRows = self._HashRows(data)
         return any([
@@ -95,11 +105,11 @@ class LyricsEditor(tksheet.Sheet):
     
     def Populate(self, __lis: Iterable[LyricsItem], /) -> None:
         """Populates the provided LRC object into this editor."""
-        self.set_sheet_data(__lis, reset_col_positions=False)
+        self.set_sheet_data(__lis, reset_col_positions=False, redraw=True)
     
     def InsertRowAbove(self) -> None:          
         # Getting the selection box...
-        data = self.get_sheet_data()
+        data: list[LyricsItem] = self.get_sheet_data()
         selectedBox = self.get_all_selection_boxes()
         if selectedBox:
             # There are selected cells,
