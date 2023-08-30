@@ -1,14 +1,24 @@
+#
+# 
+#
+"""
+"""
+
+
 import asyncio
 from asyncio import AbstractEventLoop
 from concurrent.futures import ProcessPoolExecutor, Future
 from concurrent.futures import CancelledError
 from pathlib import Path
-import sys
 from threading import Thread
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, TypeVar, ParamSpec
 
 from media.lrc import Lrc
 from win_utils import LoadingFolderInfo
+
+
+_ReturnType = TypeVar('_ReturnType')
+_Param = ParamSpec('_Param')
 
 
 class AsyncioThrd(Thread):
@@ -62,6 +72,26 @@ class AsyncioThrd(Thread):
         # on the same thread, we must have called self.loop.stop()
         self._running = False
         self.loop.call_soon_threadsafe(self.loop.stop)
+    
+    def Submit(
+            self,
+            callback: Callable[_Param, _ReturnType],
+            args: tuple[Any, ...] = (),
+            kwargs: dict[str, Any] | None = None,
+            ) -> Future[_ReturnType]:
+        if kwargs is None:
+            kwargs = {}
+        return asyncio.run_coroutine_threadsafe(
+            self._Submit(callback, args, kwargs),
+            self.loop)
+    
+    async def _Submit(
+            self,
+            callback: Callable[_Param, _ReturnType],
+            args: tuple[Any, ...],
+            kwargs: dict[str, Any],
+            ) -> Future[_ReturnType]:
+        return callback(*args, **kwargs)
     
     def LoadFolder(
             self,

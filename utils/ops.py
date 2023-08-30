@@ -32,9 +32,9 @@ _PLVW_TAGS['TPE1'] = 'Artist'
 
 
 def LoadPlaylist(
+        q: Queue | None,
         playlist: Path,
         master: tk.Misc,
-        q: Queue | None,
         added_cb: Callable[[Path], None] | None = None,
         changed_cb: Callable[[Path], None] | None = None,
         deleted_cb: Callable[[Path], None] | None = None,
@@ -47,6 +47,8 @@ def LoadPlaylist(
     from media import PLAYLIST_EXTS, FolderPlaylist, GetAllTags
     if q:
         q.put(f'Loading playlist\n{playlist}')
+    import time
+    time.sleep(10)
     if playlist.is_dir():
         playlistObj = FolderPlaylist(
             master=master,
@@ -71,7 +73,10 @@ def LoadPlaylist(
     return playlistObj, plyItems
 
 
-def LoadLrc(lrc_file: PathLike, q: Queue | None) -> Lrc:
+def LoadLrc(
+        q: Queue | None,
+        lrc_file: PathLike,
+        ) -> Lrc:
     """Loads the specified LRC file."""
     if q:
         q.put(f'Loading\n{lrc_file}')
@@ -80,9 +85,9 @@ def LoadLrc(lrc_file: PathLike, q: Queue | None) -> Lrc:
 
 
 def LoadAudio(
+        q: Queue | None,
         audio_file: PathLike,
         mp3_class: type[AbstractMp3],
-        q: Queue | None,
         ) -> AbstractMp3:
     if q:
         q.put(f'Loading audio\n{audio_file}')

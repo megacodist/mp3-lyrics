@@ -9,7 +9,6 @@ import tkinter as tk
 from typing import Iterable
 
 import tksheet
-from tksheet._tksheet_other_classes import SelectRowEvent
 
 from media.lrc import LyricsItem, Timestamp
 
@@ -34,9 +33,6 @@ class LyricsEditor(tksheet.Sheet):
         self.headers([
             'Timestap',
             'Lyrics/text'])
-        self.set_sheet_data([[1, 2], [3, 4]], reset_col_positions=False)
-        #self.set_sheet_data([], reset_col_positions=False)
-        #self.SetChangeOrigin()
         self.enable_bindings(
             'drag_select',
             'single_select',
@@ -46,12 +42,6 @@ class LyricsEditor(tksheet.Sheet):
             'double_click_column_resize',
             'arrowkeys',
             'edit_cell')
-        self.extra_bindings(
-            'row_select',
-            self._OnRowSelection)
-    
-    def _OnRowSelection(self, event: SelectRowEvent) -> None:
-        pass
     
     def SetChangeOrigin(self) -> None:
         """Sets the current status of the editor as the origin for

@@ -47,8 +47,6 @@ class LyricsView(ttk.Frame):
         self._ipady = ipady
         self._cnvsWidth: int = 1
         self._cnvsHeight: int = 1
-        self._vscrlbrMapped: bool = False
-        """Specifies whether the vertical scroll bar is visible or not."""
         self._lyrics: list[str] = []
         """The lyrics of this lyrics view."""
         self._msgs: list[tk.Message] = []
@@ -144,7 +142,12 @@ class LyricsView(ttk.Frame):
 
     def Clear(self) -> None:
         """Clears this lyrics view out of all lyrics."""
+        self._HideScrollbar()
+        self._lyrics.clear()
         self._cnvs.delete('all')
+        self._cnvs.update_idletasks()
+        self._cnvsWidth = self._GetCnvsWidth()
+        self._cnvsHeight = self._GetCnvsHeight()
     
     def Populate(
             self,
@@ -170,7 +173,10 @@ class LyricsView(ttk.Frame):
         """Redraws the internal canvas. If the width and height of the
         canvas are not provided, first it reads those valies.
         """
-        self.Clear()
+        self._cnvs.delete('all')
+        if self._highlightable and self._vscrlbr.winfo_ismapped():
+            self._HideScrollbar()
+            self._cnvs.update_idletasks()
         nLyrics = len(self._lyrics)
         if nLyrics <= 0:
             # No lyrics to show, returning, the canvas cleared...
@@ -236,7 +242,7 @@ class LyricsView(ttk.Frame):
                 cnvsHalfHeight,
                 cnvsWidth,
                 self._heights[nLyrics] + cnvsHalfHeight)
-            #self._ShowScrollbar()
+            self._ShowScrollbar()
         else:
             delta = self._heights[nLyrics] // 2
             self._cnvs['scrollregion'] = (
@@ -244,6 +250,7 @@ class LyricsView(ttk.Frame):
                 delta,
                 cnvsWidth,
                 self._heights[nLyrics] + cnvsHeight - delta)
+            self._HideScrollbar()
     
     def _ShowScrollbar(self) -> None:
         """Makes the vertical scroll bar appear in the lyrics view."""

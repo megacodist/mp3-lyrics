@@ -9,6 +9,7 @@
 
 
 import enum
+import logging
 from threading import RLock
 import tkinter as tk
 from tkinter import ttk
@@ -79,6 +80,8 @@ class _MessageItem(tk.Canvas):
         self._cbClose = close_cb
         self._imgSize: int = img_size
         """The quantity of width and height of the close image."""
+        self._msgData : _MessageData | None = None
+        """The message data associated with this message item."""
         self._msg_title = tk.Message(
             self,
             justify=tk.CENTER)
@@ -90,12 +93,20 @@ class _MessageItem(tk.Canvas):
             cursor='hand1',
             image=self._IMG_CLOSE,
             width=self._imgSize)
+        # Binding events...
+        self._lbl_close.bind("<Button-1>", self._OnCloseClicked)
+    
+    def _OnCloseClicked(self, _: tk.Event) -> None:
+        if self._msgData is None:
+            logging.error('E-1-1')
+            return
+        self._cbClose(self._msgData)
     
     def Populate(self, msg_data: _MessageData) -> None:
-        title = msg_data._title if msg_data._title else \
-            msg_data._type.name.title()
+        self._msgData = msg_data
         self._RedrawCnvs(
-            title=title,
+            title=msg_data._title if msg_data._title else \
+                msg_data._type.name.title(),
             message=msg_data._message,
             background=msg_data._type.value)
 
@@ -142,70 +153,19 @@ class _MessageItem(tk.Canvas):
         y += self._msg_msg.winfo_reqheight()
         self.config(height=y)
         self.update_idletasks()
-
-
-class _MessageItem_2(tk.Frame):
-    def __init__(
-            self,
-            master: tk.Misc,
-            close_img: TkImg,
-            close_cb: Callable[[], None],
-            ) -> None:
-        super().__init__(master)
-        self._master = master
-        self._IMG_CLOSE = close_img
-        self._cbClose: Callable[[], None] = close_cb
-        self._InitGui()
     
-    def _InitGui(self) -> None:
-        self.columnconfigure(0, weight=1)
-        # The title...
-        self._svar_title = tk.StringVar(self)
-        self._msg_title = tk.Message(
-            self,
-            justify=tk.CENTER,
-            textvariable=self._svar_title)
-        self._msg_title.grid(
-            column=0,
-            row=0,
-            sticky=tk.NSEW)
-        # The close button...
-        self._btn_close = ttk.Button(
-            self,
-            cursor='hand1',
-            command=self._cbClose,
-            image=self._IMG_CLOSE)
-        self._btn_close.grid(
-            column=1,
-            row=0,
-            sticky=tk.NE)
-        # The message...
-        self._svar_msg = tk.StringVar(self)
-        self._msg_msg = tk.Message(
-            self,
-            justify=tk.LEFT,
-            textvariable=self._svar_msg)
-        self._msg_msg.grid(
-            column=0,
-            row=1,
-            columnspan=2,
-            sticky=tk.NSEW)
-    
-    def Populate(
-            self,
-            msg_data: _MessageData
-            ) -> None:
-        from functools import partial
-        self.update_idletasks()
-        self._btn_close['command'] = partial(self._cbClose, msg_data)
-        # Chnaging background color...
-        self['background'] = msg_data._type.value
-        self._msg_title['background'] = msg_data._type.value
-        self._msg_msg['background'] = msg_data._type.value
-        # Setting texts...
-        self._svar_msg.set(msg_data._message)
-        self._svar_title.set(msg_data._title if msg_data._title else \
-            msg_data._type.name.title())
+    def destroy(self) -> None:
+        # Cleaing up simple attributes...
+        del self._IMG_CLOSE
+        del self._cbClose
+        del self._imgSize
+        del self._msgData
+        # Cleaing up children widgets...
+        self._lbl_close.destroy()
+        self._msg_msg.destroy()
+        self._msg_title.destroy()
+        # Going on the cleaning procedure into super object...
+        super().destroy()
 
 
 class MessageView(ttk.Frame):
@@ -305,8 +265,12 @@ class MessageView(ttk.Frame):
             self._msgsWdgts.insert(0, widget)
         self._RedrawCnvs()
     
-    def RemoveMessage(self, hash_: int) -> None:
-        pass
+    def RemoveMessage(self, msg_data: _MessageData) -> None:
+        idx = self._msgsData.index(msg_data)
+        del self._msgsData[idx]
+        msgItem = self._msgsWdgts.pop(idx)
+        self._msgsWdgts.append(msgItem)
+        self._RedrawCnvs()
     
     def Clear(self) -> None:
         """Clears the whole content."""

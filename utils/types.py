@@ -46,6 +46,8 @@ class GifImage:
         import PIL.Image
         self._frames: list[PIL.ImageTk.PhotoImage] = []
         """The frames of this GIF image."""
+        self._idx: int = 0
+        """The index of the next frame."""
         self._HGIF_WAIT = PIL.Image.open(gif)
         idx = 0
         while True:
@@ -56,6 +58,19 @@ class GifImage:
                 idx += 1
             except EOFError :
                 break
+    
+    def NextFrame(self) -> PIL.ImageTk.PhotoImage:
+        """Returns the next frame of this gif image. On consecutive
+        calls, this methods endlessly loops over all available frames
+        jumping from end to the first.
+        """
+        try:
+            frame = self._frames[self._idx]
+            self._idx += 1
+        except IndexError:
+            frame = self._frames[0]
+            self._idx = 1
+        return frame
     
     def __getitem__(self, __idx: int, /) -> PIL.ImageTk.PhotoImage:
         return self._frames[__idx]
