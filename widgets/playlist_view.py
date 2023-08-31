@@ -112,7 +112,7 @@ class _PlvwItem(tk.Frame):
     def _OnMouseClicked(self, _: tk.Event) -> None:
         if self._selected:
             return
-        self.Selected = True
+        #self.Selected = True
         self._selectCb(self._idx)
     
     def _InitGui(self) -> None:
@@ -165,12 +165,15 @@ class _PlvwItem(tk.Frame):
                 row=row,
                 column=1,
                 sticky=tk.NW)
-
+    
     def __del__(self) -> None:
+        # Freeing simple attributes...
         del self._idx
         del self._selectCb
         del self._selected
         del self._item
+        del self._defaultBack
+        del self._hoverBack
 
 
 class PlaylistView(tk.Frame):
@@ -296,10 +299,10 @@ class PlaylistView(tk.Frame):
         """
         self._plvwItems[idx].update_idletasks()
         itemY0 = self._plvwItems[idx].winfo_y()
-        itemY1 = itemY0 + self._plvwItems[idx].winfo_reqheight()
+        itemY1 = itemY0 + self._plvwItems[idx].winfo_height()
         self._cnvs.update_idletasks()
         cnvsY0 = self._cnvs.canvasy(0)
-        cnvsY1 = self._cnvs.canvasy(self._cnvs.winfo_reqheight())
+        cnvsY1 = self._cnvs.canvasy(self._cnvs.winfo_height())
         return (cnvsY0 <= itemY0 <= cnvsY1) or (cnvsY0 <= itemY1 <= cnvsY1)
     
     def _ScrollTo(self, idx: int) -> None:
@@ -338,7 +341,19 @@ class PlaylistView(tk.Frame):
         x1 = self._cnvs.canvasx(self._cnvs.winfo_width())
         y1 = self._cnvs.canvasy(self._cnvs.winfo_height())
         return (x0, y0, x1, y1)
-
-    def __del__(self) -> None:
+    
+    def destroy(self) -> None:
+        # Freeing simple attributes...
         del self._margin
         del self._selectCb
+        del self._selected
+        del self._scrollRegion
+        # Destroying children widgets...
+        if self._frame:
+            self._frame.destroy()
+        for widget in self._plvwItems:
+            widget.destroy()
+        self._plvwItems.clear()
+        del self._plvwItems
+        # Calling super class destroyer...
+        super().destroy()

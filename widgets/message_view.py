@@ -98,7 +98,7 @@ class _MessageItem(tk.Canvas):
     
     def _OnCloseClicked(self, _: tk.Event) -> None:
         if self._msgData is None:
-            logging.error('E-1-1')
+            logging.error('E-1-1', stack_info=True)
             return
         self._cbClose(self._msgData)
     

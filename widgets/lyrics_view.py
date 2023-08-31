@@ -145,6 +145,7 @@ class LyricsView(ttk.Frame):
         self._HideScrollbar()
         self._lyrics.clear()
         self._cnvs.delete('all')
+        self._highlightable = False
         self._cnvs.update_idletasks()
         self._cnvsWidth = self._GetCnvsWidth()
         self._cnvsHeight = self._GetCnvsHeight()

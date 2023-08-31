@@ -114,14 +114,14 @@ class InfoView(ttk.Frame):
         for child in self._trvw.get_children(self._iid_fileInfo):
             self._trvw.delete(child)
 
-    def ClearMp3Info(self) -> None:
-        """Clears MP3 information from the info view."""
+    def ClearAudioInfo(self) -> None:
+        """Clears audio information from the info view."""
         for child in self._trvw.get_children(self._iid_mp3Info):
             self._trvw.delete(child)
         for child in self._trvw.get_children(self._iid_mp3Tags):
             self._trvw.delete(child)
-        for child in self._trvw.get_children(self._iids_streams):
-            self._trvw.delete(child)
+        self._trvw.delete(*self._iids_streams)
+        self._iids_streams.clear()
 
     def ClearLrcInfo(self) -> None:
         """Clears lyrics information from the info view."""
@@ -137,7 +137,7 @@ class InfoView(ttk.Frame):
         for item in self._trvw.get_children(self._iid_fileInfo):
             self._trvw.delete(item)
 
-    def PopulateMp3Info(self, __mp3Info: AbstractMp3, /) -> None:
+    def PopulateAudioInfo(self, __mp3Info: AbstractMp3, /) -> None:
         # Saving the MP3Info object...
         self._mp3 = __mp3Info
         # Clearing 'MP3 information' item...

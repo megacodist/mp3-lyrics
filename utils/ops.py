@@ -47,8 +47,6 @@ def LoadPlaylist(
     from media import PLAYLIST_EXTS, FolderPlaylist, GetAllTags
     if q:
         q.put(f'Loading playlist\n{playlist}')
-    import time
-    time.sleep(10)
     if playlist.is_dir():
         playlistObj = FolderPlaylist(
             master=master,
@@ -79,8 +77,9 @@ def LoadLrc(
         ) -> Lrc:
     """Loads the specified LRC file."""
     if q:
-        q.put(f'Loading\n{lrc_file}')
-    lrc_file = Lrc.GetLrcFilename(lrc_file)
+        q.put(f'Loading LRC\n{lrc_file}')
+    import time
+    time.sleep(5)
     return Lrc(lrc_file, True, True)
 
 
@@ -91,4 +90,6 @@ def LoadAudio(
         ) -> AbstractMp3:
     if q:
         q.put(f'Loading audio\n{audio_file}')
+    import time
+    time.sleep(2)
     return mp3_class(audio_file)

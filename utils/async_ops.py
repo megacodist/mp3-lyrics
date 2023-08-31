@@ -160,9 +160,11 @@ class _WidgetAssets:
         self.widget = widget
         """The `Widget` that this object holds its assets."""
         self.q = Queue()
+        """The messaging queue associated with this widget."""
         self.ops: set[AsyncOp] = set()
-        """The operations """
+        """The operations associated with this widget."""
         self.waitFrame = WaitFrame(widget, wait_gif, self.q, self)
+        """The wait frame associated with this widget."""
     
     def __del__(self) -> None:
         del self.widget
@@ -180,6 +182,9 @@ class AsyncOpManager:
             asyncio_thrd: AsyncioThrd,
             ) -> None:
         self._master = master
+        """The widget, typically the main window of the application, which
+        offers `after` method.
+        """
         self._GIF_WAIT = gif_wait
         self._asyncOps: set[AsyncOp] = set()
         """The internal list of `AsyncOp` objects."""
@@ -227,14 +232,12 @@ class AsyncOpManager:
         """
         # Making assets for all the involving widgets...
         for widget in widgets:
-            try:
-                self._widgets[widget]
-            except KeyError:
+            if widget not in self._widgets:
                 self._widgets[widget] = _WidgetAssets(widget, self._GIF_WAIT)
         # Making an `AsyncOp` object...
         asyncOp = AsyncOp(
             self._asyncioThrd,
-            self._widgets[widgets[0]].q if widgets else None,
+            self._widgets[next(iter(widgets))].q if widgets else None,
             start_cb,
             start_args,
             start_kwargs,
@@ -250,7 +253,7 @@ class AsyncOpManager:
         asyncOp.Start()
         for widget in widgets:
             self._widgets[widget].waitFrame.Show()
-        # Scheduling the track of 'after' operations...
+        # Scheduling next round tracking of async operations...
         if not self._afterID:
             self._afterID = self._master.after(
                 self._INTRVL,
@@ -375,7 +378,6 @@ class WaitFrame(ttk.Frame):
     def Close(self) -> None:
         """Closes this WaitFrame."""
         self.after_cancel(self._afterID)
-        self._cbCancel = None
         self.place_forget()
         self.destroy()
     
@@ -393,11 +395,6 @@ class WaitFrame(ttk.Frame):
     
     def _UpdateGui(self) -> None:
         # Showing next GIF frame...
-        """try:
-            self._lbl_wait['image'] = self._GIF_WAIT[idx]
-        except IndexError:
-            idx = 0
-            self._lbl_wait['image'] = self._GIF_WAIT[idx]"""
         self._lbl_wait['image'] = self._GIF_WAIT.NextFrame()
         # Showing the next message...
         try:
@@ -405,6 +402,7 @@ class WaitFrame(ttk.Frame):
             self._msg['text'] = msg
         except Empty:
             pass
+        # Scheduing next round of GUI update...
         self._afterID = self.after(
             self._TIME_AFTER,
             self._UpdateGui)
