@@ -5,14 +5,13 @@
 """
 
 
-from asyncio import Future
+from concurrent.futures import ThreadPoolExecutor, Future
 import enum
 from queue import Queue, Empty
 from threading import RLock
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable, Iterable, TypeVar, ParamSpec
-from asyncio_thrd import AsyncioThrd
 
 from utils.types import GifImage
 
@@ -56,7 +55,7 @@ class AsyncOp:
 
     def __init__(
             self,
-            asyncio_thrd: AsyncioThrd,
+            thrd_pool: ThreadPoolExecutor,
             q: Queue | None,
             start_cb: Callable[_Param, _ReturnType],
             start_args: tuple[Any, ...] = (),
@@ -69,7 +68,7 @@ class AsyncOp:
             ) -> None:
         self._hash = AsyncOp._GetHash()
         """The unique hash of this instance."""
-        self._asyncioThrd = asyncio_thrd
+        self._thrdPool = thrd_pool
         """The Async I/O thread."""
         self.cbStart = start_cb
         """The callback which starts this async operation."""
@@ -103,10 +102,10 @@ class AsyncOp:
     def Start(self) -> None:
         """Starts this asynchronous ('after') operation."""
         args = tuple([self._q, *self.startArgs])
-        self._future = self._asyncioThrd.Submit(
+        self._future = self._thrdPool.submit(
             self.cbStart,
-            args,
-            self.startKwargs)
+            *args,
+            **self.startKwargs)
         self._status = AfterOpStatus.RUNNING
     
     def HasDone(self) -> bool:
@@ -134,7 +133,7 @@ class AsyncOp:
     def __del__(self) -> None:
         # Freeing simple attributes...
         del self._hash
-        del self._asyncioThrd
+        del self._thrdPool
         del self.cbCancel
         del self.cancelArgs
         del self.cbFinished
@@ -175,11 +174,16 @@ class _WidgetAssets:
 
 
 class AsyncOpManager:
+    """The manager of asynchronous operations manager.
+
+    Whenever you have finished with objects of this class, call `close`
+    to release resources.
+    """
+
     def __init__(
             self,
             master: tk.Misc,
             gif_wait: GifImage,
-            asyncio_thrd: AsyncioThrd,
             ) -> None:
         self._master = master
         """The widget, typically the main window of the application, which
@@ -194,13 +198,17 @@ class AsyncOpManager:
         """
         self._widgets: dict[tk.Widget, _WidgetAssets] = {}
         """All the widgets that has any asynchronous operation."""
-        self._asyncioThrd = asyncio_thrd
-        """The Async I/O thread to perform asynchronous operations."""
+        self._thrdPool = ThreadPoolExecutor()
+        """The thread pool executor for this async operations manager."""
         self._afterID: str = ''
         """Specifies the after ID of scheduled next round of tracking
         of asynchronous operations. If it is the empty string, no scheduling
         is registered.
         """
+
+    def close(self) -> None:
+        """Releases resources of this async operations manager."""
+        self._thrdPool.shutdown()
 
     def InitiateOp(
             self,
@@ -236,7 +244,7 @@ class AsyncOpManager:
                 self._widgets[widget] = _WidgetAssets(widget, self._GIF_WAIT)
         # Making an `AsyncOp` object...
         asyncOp = AsyncOp(
-            self._asyncioThrd,
+            self._thrdPool,
             self._widgets[next(iter(widgets))].q if widgets else None,
             start_cb,
             start_args,
@@ -304,6 +312,9 @@ class AsyncOpManager:
             widget:assets
             for widget, assets in self._widgets.items()
             if assets.ops}
+    
+    def __del__(self) -> None:
+        pass
 
 
 class WaitFrame(ttk.Frame):

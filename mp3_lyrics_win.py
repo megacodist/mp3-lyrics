@@ -131,8 +131,7 @@ class Mp3LyricsWin(tk.Tk):
         # Initializing the rest of attributes...
         self._asyncManager = AsyncOpManager(
             self,
-            self._GIF_WAIT,
-            self._asyncThrd)
+            self._GIF_WAIT)
         """The manager of asynchronous operations."""
         self._playlistAsyncOp: AsyncOp | None = None
         """The async op of loading playlist object."""
@@ -781,13 +780,11 @@ class Mp3LyricsWin(tk.Tk):
         """
         self._lastAudio = self._playlist.GetAudio(idx)
         audio_file = self._playlist.GetFullPath(idx)
-        
+        self._LoadLrc(audio_file)
         # Loading audio...
         if self._isPlaying:
             self._StopPlaying()
         self._LoadAudio(audio_file)
-
-        self._LoadLrc(audio_file)
     
     def _LoadLrc(self, audio_file: PathLike) -> None:
         """Loads the associated LRC file of `audio_file` into the GUI

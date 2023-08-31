@@ -199,7 +199,8 @@ class FFmpegMP3(AbstractMp3):
         self._playing = False
 
     def Stop(self) -> None:
-        self._popen.terminate()
+        if self._popen:
+            self._popen.terminate()
         self._pos = 0.0
         self._playing = False
 

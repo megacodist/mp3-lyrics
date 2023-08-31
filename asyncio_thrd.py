@@ -1,7 +1,11 @@
 #
 # 
 #
-"""
+"""This module offers `AsyncioThrd` class which houses a Python asyncio
+event loop on a thread.
+
+* Note: asyncio event loops are suitable for task which contain  a lot
+of `await`s otherwise
 """
 
 
