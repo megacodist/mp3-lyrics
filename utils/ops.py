@@ -78,8 +78,6 @@ def LoadLrc(
     """Loads the specified LRC file."""
     if q:
         q.put(f'Loading LRC\n{lrc_file}')
-    import time
-    time.sleep(5)
     return Lrc(lrc_file, True, True)
 
 
@@ -90,6 +88,4 @@ def LoadAudio(
         ) -> AbstractMp3:
     if q:
         q.put(f'Loading audio\n{audio_file}')
-    import time
-    time.sleep(2)
     return mp3_class(audio_file)

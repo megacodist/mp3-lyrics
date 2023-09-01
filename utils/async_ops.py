@@ -336,8 +336,6 @@ class WaitFrame(ttk.Frame):
         self._assets = assets
         self._afterID: str | None = None
         self._TIME_AFTER = 40
-        self._shown: bool = False
-        """Specifies whether this wait frame has been shown or not."""
 
         # Configuring the grid geometry manager...
         self.columnconfigure(0, weight=1)
@@ -374,7 +372,8 @@ class WaitFrame(ttk.Frame):
             pady=(4, 8,))
     
     def Show(self) -> None:
-        if self._shown:
+        # Checking whether this wait frame has started...
+        if self._afterID:
             return
         self.place(
             relx=0.5,
@@ -383,8 +382,8 @@ class WaitFrame(ttk.Frame):
             anchor=tk.CENTER)
         self._afterID = self.after(
             self._TIME_AFTER,
-            self._UpdateGui)
-        self._shown = True
+            self._UpdateGui,
+            0)
 
     def Close(self) -> None:
         """Closes this WaitFrame."""
@@ -404,9 +403,13 @@ class WaitFrame(ttk.Frame):
         for op in self._assets.ops:
             op.Cancel()
     
-    def _UpdateGui(self) -> None:
+    def _UpdateGui(self, idx: int) -> None:
         # Showing next GIF frame...
-        self._lbl_wait['image'] = self._GIF_WAIT.NextFrame()
+        try:
+            self._lbl_wait['image'] = self._GIF_WAIT[idx]
+        except IndexError:
+            idx = 0
+            self._lbl_wait['image'] = self._GIF_WAIT[idx]
         # Showing the next message...
         try:
             msg = self._q.get_nowait()
@@ -416,7 +419,8 @@ class WaitFrame(ttk.Frame):
         # Scheduing next round of GUI update...
         self._afterID = self.after(
             self._TIME_AFTER,
-            self._UpdateGui)
+            self._UpdateGui,
+            idx + 1)
     
     def __del__(self) -> None:
         del self._master
@@ -427,4 +431,3 @@ class WaitFrame(ttk.Frame):
         del self._lbl_wait
         del self._msg
         del self._afterID
-        del self._shown
