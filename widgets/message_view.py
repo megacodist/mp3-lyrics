@@ -275,37 +275,17 @@ class MessageView(ttk.Frame):
     def Clear(self) -> None:
         """Clears the whole content."""
         self._cnvs.delete('all')
-        for widget in self._frm_container.winfo_children():
-            widget.grid_forget()
-        self._cnvs.update_idletasks()
+        self._msgsData.clear()
         self._scrollRegion = (
             0,
             0,
-            self.winfo_width(),
-            self.winfo_height())
-        self._cnvs['scrollregion'] = self._scrollRegion
-    
-    def _RedrawCnvs___(self) -> None:
-        self._cnvs.delete('all')
-        y = 0
-        cnvsWidth = self._cnvs.winfo_width()
-        cnvsHeight = self._cnvs.winfo_height()
-        for idx in range(len(self._msgsData)):
-            self._msgsWdgts[idx]['width'] = cnvsWidth
-            self._msgsWdgts[idx].Populate(self._msgsData[idx])
-            self._msgsWdgts[idx].update_idletasks()
-            self._cnvs.create_window(
-                0,
-                y,
-                anchor=tk.NW,
-                window=self._msgsWdgts[idx])
-            y += self._msgsWdgts[idx].winfo_height()
-        y = y if y > cnvsHeight else cnvsHeight
-        self._scrollRegion = (0, 0, cnvsWidth, y)
+            self._GetCnvsWidth(),
+            self._GetCnvsHeight())
         self._cnvs['scrollregion'] = self._scrollRegion
     
     def _RedrawCnvs(self) -> None:
-        self.Clear()
+        self._cnvs.delete('all')
+        self._cnvs.update_idletasks()
         cnvsWidth = self._GetCnvsWidth()
         msgItemWidth = cnvsWidth - 2 * self._pady
         y = self._padx
@@ -373,172 +353,3 @@ class MessageView(ttk.Frame):
         del self._cnvs
         # Calling the parent destructor ---------------
         super().destroy()
-
-
-class MessageView_old(ttk.Frame):
-    _colors = {
-        MessageType.INFO: 'LightBlue1',
-        MessageType.WARNING: '#e9e48f',
-        MessageType.ERROR: '#e5a3a3'}
-
-    def __init__(
-            self,
-            master: tk.Misc,
-            *,
-            padx=5,
-            pady=5,
-            gap=10,
-            max_events: int = 20,
-            **kwargs
-            ) -> None:
-        from tkinter.font import nametofont, Font
-        super().__init__(master, **kwargs)
-
-        # Getting the font of the tree view...
-        try:
-            self._font: Font = master['font']
-        except tk.TclError:
-            self._font: Font = nametofont('TkDefaultFont')
-
-        self._mouseInside: bool = False
-        self._msgs: list[tk.Message] = []
-        self.max_events = max_events
-        self._padx = padx
-        self._pady = pady
-        self._gap = gap
-
-        self._InitGui()
-        
-        # Bindings...
-        self.bind(
-            '<Enter>',
-            self._OnMouseEntered)
-        self.bind(
-            '<Leave>',
-            self._OnMouseLeft)
-        self._cnvs.bind_all(
-            '<MouseWheel>',
-            self._OnMouseWheel)
-        self._cnvs.bind(
-            '<Configure>',
-            self._OnCnvsSizeChanged)
-    
-    def _InitGui(self) -> None:
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        
-        #
-        self._vscrlbr = ttk.Scrollbar(
-            self,
-            orient=tk.VERTICAL)
-        self._cnvs = tk.Canvas(
-            self,
-            yscrollcommand=self._vscrlbr.set)  
-        self._vscrlbr['command'] = self._cnvs.yview
-        self._cnvs.grid(
-            column=0,
-            row=0,
-            padx=5,
-            pady=5,
-            sticky=tk.NSEW)
-        self._vscrlbr.grid(
-            column=1,
-            row=0,
-            sticky=tk.NSEW)
-    
-    def _OnMouseEntered(self, _: tk.Event) -> None:
-        self._mouseInside = True
-    
-    def _OnMouseLeft(self, _: tk.Event) -> None:
-        self._mouseInside = False
-    
-    def _OnMouseWheel(self, event: tk.Event) -> None:
-        if self._mouseInside:
-            self._cnvs.yview_scroll(
-                int(-1 * (event.delta / 24)),
-                'units')
-    
-    def _OnCnvsSizeChanged(self, event: tk.Event) -> None:
-        width = (
-            event.width
-            - (int(self._cnvs['bd']) << 1)
-            - 4
-            - (self._padx << 1))
-        for msg in self._msgs:
-            msg['width'] = width
-        self._RedrawCnvs()
-    
-    def AddMessage(
-            self,
-            message: str,
-            title: str | None = None,
-            type: MessageType = MessageType.INFO
-            ) -> None:
-
-        text = ''
-        if title:
-            text = f'{title}\n\n'
-        text += message
-
-        msg = tk.Message(
-            self._cnvs,
-            anchor=tk.NW,
-            background=MessageView._colors[type],
-            width=self._GetCnvsWidth(),
-            text=text)
-        self._msgs.insert(0, msg)
-
-        while len(self._msgs) > self.max_events:
-            self._msgs[-1].destroy()
-            self._msgs.pop()
-        
-        self._cnvs.create_window(0, 0, window=msg)
-        self.update_idletasks()
-        self._RedrawCnvs()
-    
-    def _RedrawCnvs(self) -> None:
-        self._cnvs.delete('all')
-        nMsgs = len(self._msgs)
-        if nMsgs <= 0:
-            return
-        cnvsWidth = self._GetCnvsWidth()
-        cnvsHalfWidth = cnvsWidth >> 1
-        cnvsHeight = self._GetCnvsHeight()
-        # Drawing the first message...
-        y = self._pady
-        self._cnvs.create_window(
-            cnvsHalfWidth,
-            y,
-            anchor=tk.N,
-            window=self._msgs[0])
-        y += self._msgs[0].winfo_reqheight()
-        # Drawing the rest of messages...
-        for idx in range(1, nMsgs):
-            y += self._gap
-            self._cnvs.create_window(
-                cnvsHalfWidth,
-                y,
-                anchor=tk.N,
-                window=self._msgs[idx])
-            y += self._msgs[idx].winfo_reqheight()
-            idx += 1
-        y += self._pady
-        if y < cnvsHeight:
-            y = cnvsHeight
-        self._cnvs['scrollregion'] = (0, 0, cnvsWidth, y)
-    
-    def _GetCnvsWidth(self) -> int:
-        self._cnvs.update_idletasks()
-        return (
-            self._cnvs.winfo_width()
-            - 4
-            - (self._padx << 1)
-            + (int(self._cnvs['bd']) << 1))
-    
-    def _GetCnvsHeight(self) -> int:
-        self._cnvs.update_idletasks()
-        return (
-            self._cnvs.winfo_height()
-            - 4
-            - (self._pady << 1)
-            + (int(self._cnvs['bd']) << 1))

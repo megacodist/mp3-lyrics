@@ -100,10 +100,15 @@ class SortedList(Sequence, Generic[_ElemType]):
     '''This list keeps inserted elements in a sorted condition.
     This sortation is achieved either by the objects themselves
     if they implement comparison magic methods or by the use of a
-    'key' function.
+    `key` function.
 
-    SortedList is a sequence-like, iterable, and iterator class. This
-    class is not thread safe.
+    `SortedList` has the following properties:
+    * It is sequence-like (supports builtin `len` function).
+    * It supports subscription notation for integers (indexable).
+    * It supports the iterator protocol.
+    * It supports the builtin `repr` function.
+    * Objects of this class are comparable.
+    * This class is not thread safe.
     '''
 
     def __init__(
@@ -218,6 +223,9 @@ class SortedList(Sequence, Generic[_ElemType]):
             return str([item.data for item in self._items])
         else:
             return str(self._items)
+    
+    def __repr__(self) -> str:
+        return f"SortedList({str(self)})"
     
     def __contains__(self, value: _ElemType) -> bool:
         """Determines that specified value exists in the list or not."""

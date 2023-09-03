@@ -38,6 +38,7 @@ class LyricsEditor(tksheet.Sheet):
             'single_select',
             'row_drag_and_drop',
             'row_select',
+            'row_height_resize',
             'column_width_resize',
             'double_click_column_resize',
             'arrowkeys',

@@ -9,6 +9,7 @@ from concurrent.futures._base import Future
 import logging
 from os import PathLike
 from pathlib import Path
+from pprint import pprint
 import re
 import tkinter as tk
 from tkinter import ttk
@@ -247,7 +248,7 @@ class Mp3LyricsWin(tk.Tk):
             self._IMG_CLOSE)
         self._ntbk_infoEvents.add(
             self._msgvw,
-            text='Events')
+            text='Messages')
         #
         self._frm_controls = ttk.Frame(
             master=self._frm_main)
@@ -483,6 +484,10 @@ class Mp3LyricsWin(tk.Tk):
         self._menubar.add_cascade(
             label='File',
             menu=self._menu_file)
+        self._menu_file.add_command(
+            label='Clear messages',
+            command=self._msgvw.Clear)
+        self._menu_file.add_separator()
         self._menu_file.add_command(
             label='Open an MP3...',
             accelerator='Ctrl+O',
@@ -940,11 +945,12 @@ class Mp3LyricsWin(tk.Tk):
     
     def _StopPlaying(self) -> None:
         self._btn_palyPause['image'] = self._IMG_PLAY
-        self._isPlaying = False
         self._mp3.Stop()
         self._slider_playTime.set(0.0)
         self._RemoveABRepeat()
-        self._StopSyncingPTSlider()
+        if self._isPlaying:
+            self._StopSyncingPTSlider()
+            self._isPlaying = False
     
     def _SyncPTSlider(self) -> None:
         try:
@@ -968,7 +974,15 @@ class Mp3LyricsWin(tk.Tk):
             self._slider_playTime.set(self._pos)
         # Highlighting the current lyrics...
         _, idx = self._timestamps.index(self._pos)
-        self._lrcvw.Highlight(idx - 1)
+        try:
+            self._lrcvw.Highlight(idx - 1)
+        except TypeError:
+            msg = '\n'.join((
+                'E-2-1',
+                repr(self._timestamps),
+                f"idx: {idx}"))
+            logging.error('\n'.join(msg), stack_info=True)
+            print(msg)
         self._syncPTAfterID = self.after(
             self._TIME_PLAYBACK,
             self._SyncPTSlider)
@@ -1122,25 +1136,6 @@ class Mp3LyricsWin(tk.Tk):
     def _SetB(self) -> None:
         self._abvw.b = self.pos
     
-    def _CloseViewsEditors(self) -> None:
-        """Closes (clears) the lyrics view, the info view, and the lyrics
-        editor.
-        """
-        # Clearing the lyrics editor...
-        if self._mp3 and self._lrcedt.HasChanged():
-            mode = 'save changes to the' if self._lrc else 'create an'
-            toSave = askyesno(
-                title='Unsaved changes',
-                message=f'Do you want {mode} LRC file?')
-            if toSave:
-                self._SaveCreateLrc()
-        self._lrcedt.ClearContent()
-        self._lrcedt.SetChangeOrigin()
-        # Closing the info view...
-        self._infovw.Clear()
-        # Clearing the lyrics view...
-        self._lrcvw.Clear()
-    
     def _SaveCreateLrc(self) -> None:
         """Saves the LRC or creates an LRC object."""
         if self._mp3 and self._lrcedt.HasChanged():
@@ -1152,6 +1147,7 @@ class Mp3LyricsWin(tk.Tk):
             self._lrc['by'] = 'https://twitter.com/megacodist'
             self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
             self._lrc.Save()
+            self._timestamps.clear()
             self._OnLrcLoaded(self._lrc)
         elif self._mp3:
             self._msgvw.AddMessage(
@@ -1191,18 +1187,6 @@ class Mp3LyricsWin(tk.Tk):
             length += '0'
         self._lbl_lengthMilli['text'] = length
 
-    '''def _InitPlayer(self) -> None:
-        """Makes the player section of the GUI ready to play."""
-        self._WithdrawAudio_Gui()
-        self._mp3.volume = self._slider_volume.get() * 10
-        self._slider_playTime['to'] = self._mp3.Duration
-        self._ShowAudioLength_Gui(self._mp3.Duration)
-        self._abvw.length = self._mp3.Duration
-        self._abvw.b = self._abvw.length
-        self.pos = 0
-        self.title(f'{Path(self._lastAudio).name} - MP3 Lyrics')
-        self._ExhibitAudio_Gui()'''
-
     def _ExhibitAudio_Gui(self) -> None:
         """Makes the player section of the GUI ready to play."""
         self._btn_palyPause['state'] = tk.NORMAL
@@ -1215,6 +1199,7 @@ class Mp3LyricsWin(tk.Tk):
         self._ShowAudioLength_Gui(self._mp3.Duration)
         self._abvw.length = self._mp3.Duration
         self._abvw.b = self._abvw.length
+        self._mp3.pos = 0
         self.pos = 0
         self.title(f'{Path(self._lastAudio).name} - MP3 Lyrics')
         self._infovw.PopulateAudioInfo(self._mp3)

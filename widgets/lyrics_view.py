@@ -57,6 +57,8 @@ class LyricsView(ttk.Frame):
         self._idx: int = -1
         """The index of highlighted item in the lyrics view. Negative
         values means no highlighted item."""
+        self._scrolled: bool = False
+        """Specifies whether the scrollbar is shown or not."""
 
         self._InitGui()
 
@@ -77,10 +79,10 @@ class LyricsView(ttk.Frame):
             column=0,
             row=0,
             sticky=tk.NSEW)
-        self._vscrlbr.grid(
+        """self._vscrlbr.grid(
             column=1,
             row=0,
-            sticky=tk.NSEW)
+            sticky=tk.NSEW)"""
         #
         msg = tk.Message(
             master=self._cnvs,
@@ -111,33 +113,36 @@ class LyricsView(ttk.Frame):
         place if `highlightable` attribute is `False`. `idx` must be
         zero-based.
 
+        If the view is highlightable and:
+        * if `idx < 0`, no lyrics will be highlighted.
+        * if `idx >= number of lyrics`, the last lyrics will be highlighted. 
+
         #### Exceptions:
         * `TypeError`: `idx` is NOT an integer.
-        * `IndexError`: `idx` is greater than or equal to the number of
-        items in the lyrics view.
         """
         if not self._highlightable:
             return
         if not isinstance(idx, int):
             raise TypeError("'idx' must be an integer")
         if idx != self._idx:
-            if idx >= len(self._lyrics):
-                raise IndexError("'idx' must be less than the numbers of"
-                    " items in the view.")
+            nLrcs = len(self._lyrics)
+            self._cnvs.update_idletasks()
+            cnvsHeight = self._cnvs.winfo_height()
+            if idx < 0:
+                idx = -1
+            elif idx >= nLrcs:
+                idx = nLrcs - 1
+            # Removing highlight from previous lyrics...
+            self._msgs[self._idx]['bg'] = self._defaultColor
+            # Scrolling the canvas to the highlighted lyrics...
             if idx < 0:
                 self._cnvs.yview_moveto(0)
-                if self._idx >= 0:
-                    self._msgs[self._idx]['bg'] = self._defaultColor
-                    self._idx = -1
-                return
-            
-            if self._idx >= 0:
-                self._msgs[self._idx]['bg'] = self._defaultColor
+            else:
+                self._cnvs.yview_moveto(
+                    self._heights[idx] / (self._heights[nLrcs] + cnvsHeight))
+            # Highlighting the new lyrics:
             if idx >= 0:
                 self._msgs[idx]['bg'] = self._highlightColor
-                cnvsHeight = self._GetCnvsHeight()
-                self._cnvs.yview_moveto(
-                    self._heights[idx] / (self._heights[-1] + cnvsHeight))
             self._idx = idx
 
     def Clear(self) -> None:
@@ -175,13 +180,17 @@ class LyricsView(ttk.Frame):
         canvas are not provided, first it reads those valies.
         """
         self._cnvs.delete('all')
-        if self._highlightable and self._vscrlbr.winfo_ismapped():
+        if self._highlightable and self._scrolled:
             self._HideScrollbar()
             self._cnvs.update_idletasks()
         nLyrics = len(self._lyrics)
         if nLyrics <= 0:
             # No lyrics to show, returning, the canvas cleared...
             return
+        # Removing possible highlight...
+        if self._idx >= 0:
+            self._msgs[self._idx]['bg'] = self._defaultColor
+        # Reading the size of the canvas...
         cnvsWidth = self._GetCnvsWidth(cnvs_width)
         self._cnvsWidth = cnvsWidth
         cnvsHeight = self._GetCnvsHeight(cnvs_height)
@@ -255,16 +264,23 @@ class LyricsView(ttk.Frame):
     
     def _ShowScrollbar(self) -> None:
         """Makes the vertical scroll bar appear in the lyrics view."""
-        if not self._vscrlbr.winfo_ismapped():
+        if not self._scrolled:
+            self._vscrlbr.update_idletasks()
+            scrlWidth = self._vscrlbr.winfo_width()
+            self._cnvs.update_idletasks()
+            cnvsWidth = self._cnvs.winfo_width()
+            self._cnvs['width'] = cnvsWidth - scrlWidth
             self._vscrlbr.grid(
                 column=1,
                 row=0,
                 sticky=tk.NSEW)
+            self._scrolled = True
     
     def _HideScrollbar(self) -> None:
         """Hides the vertical scroll bar in the lyrics view."""
-        if self._vscrlbr.winfo_ismapped():
+        if self._scrolled:
             self._vscrlbr.grid_forget()
+            self._scrolled = False
     
     def _GetCnvsWidth(self, width: int | None = None) -> int:
         """Gets the 'available' width (suitable for drawing) of the
@@ -288,8 +304,9 @@ class LyricsView(ttk.Frame):
             + (int(self._cnvs['bd']) << 1))
 
     def __del__(self) -> None:
+        del self._scrolled
         del self._highlightable
-        if self._lyrics:
-            del self._lyrics
+        self._lyrics.clear()
+        del self._lyrics
         self._msgs.clear()
         del self._msgs
