@@ -57,6 +57,20 @@ class AbstractPlaylist:
         """Gets a list of all available audios in this playlist."""
         pass
 
+    @property
+    @abstractmethod
+    def Key(self) -> Callable[[Path], Any]:
+        """Gets or sets the sorter function. If it is set to a callable,
+        it sorts the internal list as well. If it is set to `None`,
+        sorting will be disabled but the internal list remains unchanged.
+        """
+        pass
+
+    @Key.setter
+    @abstractmethod
+    def Key(self, __key: Callable[[Path], Any], /) -> None:
+        pass
+
     @abstractmethod
     def GetIndices(self, audio: Path) -> list[int]:
         """Gets indices of the specified audio in the playlist.
@@ -145,6 +159,16 @@ class FolderPlaylist(AbstractPlaylist):
     @property
     def Audios(self) -> tuple[Path, ...]:
         return tuple(self._audios)
+    
+    @property
+    def Key(self) -> Callable[[Path], Any]:
+        return self._key
+    
+    @Key.setter
+    def Key(self, __key: Callable[[Path], Any], /) -> None:
+        if __key is not None:
+            self._audios.sort(key=__key)
+        self._key = __key
     
     def Reorder(self, key: Callable[[Path], Any] | None = None,) -> None:
         """Reorders audios in this `FolderPlaylist` object."""

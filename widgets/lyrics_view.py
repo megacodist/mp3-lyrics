@@ -253,6 +253,7 @@ class LyricsView(ttk.Frame):
                 cnvsWidth,
                 self._heights[nLyrics] + cnvsHalfHeight)
             self._ShowScrollbar()
+            self._cnvs.yview_moveto(0)
         else:
             delta = self._heights[nLyrics] // 2
             self._cnvs['scrollregion'] = (

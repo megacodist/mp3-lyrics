@@ -26,6 +26,7 @@ _PLVW_TAGS = OrderedDict()
 """This ordered dictionary keeps tags to be shown in the playlist view
 widget.
 """
+_PLVW_TAGS['TRCK'] = 'Track #'
 _PLVW_TAGS['TIT2'] = 'Title'
 _PLVW_TAGS['TALB'] = 'Album'
 _PLVW_TAGS['TPE1'] = 'Artist'
@@ -41,12 +42,13 @@ def LoadPlaylist(
         ) -> tuple[AbstractPlaylist, Iterable[PlaylistItem]]:
     """Accepts a `Path` object to a playlist and returns the playlist
     object and all included audios in the playlist as a 2-tuple. It
-    returns `(None, None)` on any error.
+    returns `(None, [])` on any error.
     """
     from collections import OrderedDict
     from media import PLAYLIST_EXTS, FolderPlaylist, GetAllTags
     if q:
         q.put(f'Loading playlist\n{playlist}')
+    # Instantiating the playlist...
     if playlist.is_dir():
         playlistObj = FolderPlaylist(
             master=master,
@@ -57,7 +59,8 @@ def LoadPlaylist(
     elif Path(playlist.suffix) in PLAYLIST_EXTS:
         pass
     else:
-        return None, None
+        return None, []
+    mpSorter: dict[Path, int] = {}
     plyItems: list[PlaylistItem] = []
     for pth in playlistObj.Audios:
         tags = OrderedDict()
@@ -68,6 +71,15 @@ def LoadPlaylist(
         plyItems.append(PlaylistItem(str(pth), tags))
         tagsRaw.clear()
         del tagsRaw
+        try:
+            mpSorter[pth] = int(tags['Track #'][0]) if 'Track #' in tags \
+                else 0
+        except ValueError:
+            # Handling a/b format...
+            pass
+    playlistObj.Key = lambda pth: mpSorter[pth]
+    playlistObj.Key = None
+    plyItems.sort(key=lambda a: mpSorter[Path(a.name)])
     return playlistObj, plyItems
 
 

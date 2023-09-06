@@ -20,6 +20,7 @@ class ABView(tk.Canvas):
             ) -> None:
         super().__init__(master, **kwargs)
         self['bd'] = 0
+        self['highlightthickness'] = 0
         self['width'] = width
         self['height'] = height
         self['background'] = '#fcf8de'
@@ -95,8 +96,9 @@ class ABView(tk.Canvas):
                 "The length component of the A-B repeat"
                 + " object must be positive")
         self._length = __leng
-        self._a = 0.0
-        self._b = 0.0
+        #self._a = 0.0
+        if self._b > __leng:
+            self._b = __leng
         self._Redraw()
     
     def Reset(self) -> None:
@@ -129,6 +131,7 @@ class ABView(tk.Canvas):
     def _Redraw(self) -> None:
         self.delete('all')
         if self.IsSet():
+            self.update_idletasks()
             cnvsWidth = self.winfo_width()
             cnvsHeight = self.winfo_height()
             aX = round(self._a / self._length * cnvsWidth)

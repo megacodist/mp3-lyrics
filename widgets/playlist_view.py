@@ -243,6 +243,7 @@ class PlaylistView(tk.Frame):
             self._frame.destroy()
         self._frame = ttk.Frame(self._cnvs)
         self._plvwItems.clear()
+        self._selected = None
         nItems = len(items)
         if nItems > 0:
             plvwItem = _PlvwItem(
@@ -273,8 +274,8 @@ class PlaylistView(tk.Frame):
                 fill=tk.X,
                 expand=1)
             self._plvwItems.append(plvwItem)
-        self._cnvs.create_window(0, 0, anchor=tk.NW, window=self._frame)
         self._frame.update_idletasks()
+        self._cnvs.create_window(0, 0, anchor=tk.NW, window=self._frame)
         self._scrollRegion = (
             0,
             0,

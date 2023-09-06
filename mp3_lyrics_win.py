@@ -924,6 +924,12 @@ class Mp3LyricsWin(tk.Tk):
             self._mp3.volume = float(value) * 10
     
     def _PlayPause(self) -> None:
+        if self._mp3 is None:
+            self._msgvw.AddMessage(
+                message='No audio has been loaded to play/pause',
+                title='Play/pause audio',
+                type_=MessageType.ERROR)
+            return
         # Checking if the MP3 is palying or not...
         self._isPlaying = not self._isPlaying
         if self._isPlaying:
@@ -944,6 +950,12 @@ class Mp3LyricsWin(tk.Tk):
             self._StopSyncingPTSlider()
     
     def _StopPlaying(self) -> None:
+        if self._mp3 is None:
+            self._msgvw.AddMessage(
+                message='No audio has been loaded to stop',
+                title='Stop audio',
+                type_=MessageType.ERROR)
+            return
         self._btn_palyPause['image'] = self._IMG_PLAY
         self._mp3.Stop()
         self._slider_playTime.set(0.0)
@@ -1128,7 +1140,12 @@ class Mp3LyricsWin(tk.Tk):
         self.destroy()
     
     def _RemoveABRepeat(self) -> None:
-        self._abvw.length = self._mp3.Duration
+        if self._mp3 is not None:
+            self._abvw.a = 0.0
+            self._abvw.b = self._mp3.Duration
+            self._abvw.length = self._mp3.Duration
+        else:
+            self._abvw.Reset()
     
     def _SetA(self) -> None:
         self._abvw.a = self.pos
