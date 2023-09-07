@@ -1088,13 +1088,12 @@ class Mp3LyricsWin(tk.Tk):
         if self._mp3:
             self._mp3.Close()
         # Saving LRC if changed...
-        if self._lrc and self._lrc.changed:
+        if self._mp3 and self._lrcedt.HasChanged():
             toSave = askyesno(message='Do you want to save the LRC?')
             if toSave:
-                self._SaveLrc()
-
+                self._SaveCreateLrc()
         # Saving settings...
-        settings = {}
+        settings: dict[str, Any] = {}
         # Getting the geometry of the MP3 Lyrics Window (MLW)...
         w_h_x_y = self.winfo_geometry()
         GEOMETRY_REGEX = r"""
@@ -1114,7 +1113,6 @@ class Mp3LyricsWin(tk.Tk):
         else:
             logging.error(
                 'Cannot get the geometry of the window.')
-        
         # Getting other MP3 Lyrics Window (MLW) settings...
         settings['MLW_STATE'] = self.state()
         settings['MLW_LAST_FILE'] = self._lastAudio
