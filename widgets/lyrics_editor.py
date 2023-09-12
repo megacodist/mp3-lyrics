@@ -5,18 +5,29 @@
 """
 
 
+import logging
 import tkinter as tk
-from typing import Iterable
+from typing import Callable, Iterable
 
 import tksheet
 
 from media.lrc import LyricsItem, Timestamp
 
 
+class SelectionError(Exception):
+    """Raised when a selection-based operation is triggered with no
+    selection.
+    """
+    pass
+
+
 class LyricsEditor(tksheet.Sheet):
     def __init__(
             self,
             parent: tk.Misc,
+            *,
+            lyrics_items_sep: str = '\n',
+            timestamp_lyrics_delim: str = '\t',
             **kwargs
             ) -> None:
         """Initializes a new instance of `LyricsEditor` and sets the empty
@@ -24,6 +35,10 @@ class LyricsEditor(tksheet.Sheet):
         """
         super().__init__(parent, **kwargs)
         # Creating attributes...
+        self._lyricsItemsSep = lyrics_items_sep
+        """Specifies the separator between lyrics items."""
+        self._timestampLyricsDelim = timestamp_lyrics_delim
+        """Specifies the delimiter between timestamps and lyrics."""
         self._hashCols: str
         """The hash of data in the sheet computed column by column."""
         self._hashRows: str
@@ -34,13 +49,15 @@ class LyricsEditor(tksheet.Sheet):
             'Timestap',
             'Lyrics/text'])
         self.enable_bindings(
+            'deselect',
             'drag_select',
             'single_select',
-            'row_drag_and_drop',
             'row_select',
+            'column_select',
             'row_height_resize',
             'column_width_resize',
             'double_click_column_resize',
+            'row_drag_and_drop',
             'arrowkeys',
             'edit_cell')
     
@@ -98,63 +115,49 @@ class LyricsEditor(tksheet.Sheet):
         """Populates the provided LRC object into this editor."""
         self.set_sheet_data(__lis, reset_col_positions=False, redraw=True)
     
-    def InsertRowAbove(self) -> None:          
+    def InsertRowAbove(self) -> None:
+        """Inserts a row above selected cells. If no cell is selected,
+        it inserts a row at the start of the sheet.
+        """
         # Getting the selection box...
         data: list[LyricsItem] = self.get_sheet_data()
-        selectedBox = self.get_all_selection_boxes()
+        selectedBox: tuple[tuple[int, ...]] = self.get_all_selection_boxes()
         if selectedBox:
             # There are selected cells,
             # Inserting a row at the start of them...
             rowStart, colStart, rowEnd, colEnd = selectedBox[0]
-            data.insert(
-                rowStart,
-                LyricsItem(''))
-            # Selecting the inserted row...
-            if colEnd - colStart == 1:
-                rowIdx = rowEnd
-                colIdx = colStart
-            else:
-                rowIdx = rowStart
-                colIdx = 1
+            rowIdx = rowStart
         else:
             # No selected cells,
             # Inserting a row at the strat of the sheet...
-            data.insert(
-                0,
-                LyricsItem(''))
             rowIdx = 0
-            colIdx = 1
-
+        data.insert(
+            rowIdx,
+            LyricsItem(''))
+        colIdx = 1
         self.set_sheet_data(data, reset_col_positions=False)
         self.select_cell(rowIdx, colIdx)              
 
     def InsertRowBelow(self) -> None:
+        """Inserts a row below selected cells. If no cell is selected,
+        it inserts a row at the end of the sheet.
+        """
         # Getting the selection box...
-        data = self.get_sheet_data()
-        selectedBox = self.get_all_selection_boxes()
+        data: list[LyricsItem] = self.get_sheet_data()
+        selectedBox: tuple[tuple[int, ...]] = self.get_all_selection_boxes()
         if selectedBox:
             # There are selected cells,
             # Inserting a row at the end of them...
             rowStart, colStart, rowEnd, colEnd = selectedBox[0]
-            data.insert(
-                rowEnd,
-                LyricsItem(''))
-            # Selecting the inserted row...
-            if colEnd - colStart == 1:
-                rowIdx = rowEnd
-                colIdx = colStart
-            else:
-                rowIdx = rowEnd
-                colIdx = 1
+            rowIdx = rowEnd
         else:
             # No selected cells,
             # Inserting a row at the end of the sheet...
             rowIdx = len(data)
-            data.insert(
-                rowIdx,
-                LyricsItem(''))
-            colIdx = 1
-
+        data.insert(
+            rowIdx,
+            LyricsItem(''))
+        colIdx = 1
         self.set_sheet_data(data, reset_col_positions=False)
         self.select_cell(rowIdx, colIdx)
 
@@ -177,7 +180,11 @@ class LyricsEditor(tksheet.Sheet):
         data = self.get_sheet_data()
         data = [*data[0:rowStart], *data[rowEnd:]]
         self.set_sheet_data(data, reset_col_positions=False)
-        self.deselect()
+        #self.deselect()
+        self.selection_clear()
+    
+    def Deselect(self) -> None:
+        self.select_cell(0, 0)
     
     def SetTimestamp(self, pos: float) -> None:
         # Getting the selected box...
@@ -197,7 +204,71 @@ class LyricsEditor(tksheet.Sheet):
         clipboard = self.clipboard_get()
         return clipboard.strip().splitlines()
     
-    def OverrideFromClipboard(self) -> None:
+    def CopyLyricsOnly(self) -> None:
+        """Copies the lyrics of the selected rows of the editor to the
+        clipboard.
+        """
+        # Declaring variables -----------------------------
+        data: list[LyricsItem]
+        selectedBox: tuple[tuple[int, ...], ...]
+        # Copying lyrics only -----------------------------
+        data = self.get_sheet_data()
+        if not data:
+            # No data to copy, returning...
+            return
+        selectedBox = self.get_all_selection_boxes()
+        if not selectedBox:
+            # No selected cells, returning...
+            return
+        rowStart, colStart, rowEnd, colEnd = selectedBox[0]
+        copy = self._lyricsItemsSep.join(
+            li.text for li in data[rowStart:rowEnd])
+        self.clipboard_clear()
+        self.clipboard_append(copy)
+    
+    def CopyLyricsTimestamps(self) -> None:
+        """Copies the selection into the clipboard. It might copy
+        timestamps and/or lyrics.
+        """
+        # Declaring variables -----------------------------
+        data: list[LyricsItem]
+        selectedBox: tuple[tuple[int, ...], ...]
+        CopyLyricsItem: Callable[[LyricsItem], str]
+        # Copying lyrics only -----------------------------
+        data = self.get_sheet_data()
+        if not data:
+            # No data to copy, returning...
+            return
+        selectedBox = self.get_all_selection_boxes()
+        if not selectedBox:
+            # No selected cells, returning...
+            return
+        rowStart, colStart, rowEnd, colEnd = selectedBox[0]
+        colSpan = colEnd - colStart
+        if colSpan == 2:
+            CopyLyricsItem = lambda li: str(li.timestamp) + \
+                self._timestampLyricsDelim + li.text
+        elif colSpan == 1:
+            if colStart == 0:
+                CopyLyricsItem = lambda li: str(li.timestamp)
+            elif colStart == 1:
+                CopyLyricsItem = lambda li: li.text
+            else:
+                logging.error('E-2-3', stack_info=True)
+                return
+        else:
+            logging.error('E-2-4', stack_info=True)
+            return
+        text = self._lyricsItemsSep.join(
+            CopyLyricsItem(li) for li in data[rowStart:rowEnd])
+        self.clipboard_clear()
+        self.clipboard_append(text)
+    
+    def PasreOverrideLyrics(self) -> None:
+        # Declaring variables -----------------------------
+        data: list[LyricsItem]
+        selectedBox: tuple[tuple[int, ...], ...]
+        # Copying lyrics only -----------------------------
         data = self.get_sheet_data()
         selectedBox = self.get_all_selection_boxes()
         if not data:
@@ -225,5 +296,5 @@ class LyricsEditor(tksheet.Sheet):
                 data.append(LyricsItem(clipLines[idx]))
         self.set_sheet_data(data, reset_col_positions=False)
 
-    def InsertFromClipboard(self) -> None:
+    def PasteInsert(self) -> None:
         pass

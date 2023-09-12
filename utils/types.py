@@ -11,10 +11,44 @@
 """
 
 
+import enum
 from os import PathLike
 import pathlib
 
 import PIL.ImageTk
+
+
+class AppStatus(enum.IntFlag):
+    """These flags specify different statuses of the application."""
+    NONE = 0x00
+    """Specifies no special status for the application."""
+    PENDING_PLAY = 0x01
+    """Specifies that the audio must be played upon loading.
+    """
+
+
+class AfterPlayed(enum.IntEnum):
+    """This enumeration specifies the action upon finishing the playback
+    of the current audio in the playlist.
+    """
+    STOP = 0
+    """The player must stop playing the current audio."""
+    LOOP = 1
+    """The player must loops over the current audio."""
+    NEXT = 2
+    """The player must play next audio in the playlist.  If it is at
+    the end, it must stop playing."""
+    NEXT_LOOP = 3
+    """The player must play next audio in the playlist. If it is at
+    the end, it must start from the beginning.
+    """
+    PREV = 4
+    """The player must play previous audio in the playlist.  If it is at
+    the beginning, it must stop playing."""
+    PREV_LOOP = 5
+    """The player must play previous audio in the playlist. If it is at
+    the beginning, it must start from the end.
+    """
 
 
 FileExt = pathlib.Path
@@ -80,3 +114,54 @@ class GifImage:
         del self._frames
         self._HGIF_WAIT.close()
         del self._HGIF_WAIT
+
+
+class JumpDirection(enum.IntEnum):
+    """Specifies the direction of the `jump` operation."""
+    FORWARD = 0
+    BACKWARD = 1
+
+
+class JumpStep(enum.IntEnum):
+    """Specifies the step of the jump."""
+    SMALL = 0
+    MEDIUM = 1
+    LARGE = 2
+
+
+class CopyType(enum.Enum):
+    LYRICS = 'Lyrics only'
+    LYRICS_TIMESTAMPS = 'Lyrics and/or timestamps'
+
+
+class Prefrences:
+    """This class packs the preferences of the application. To get the
+    default customization, create an object with no argument.
+    """
+    def __init__(
+            self,
+            *,
+            small_jump_forward: int = 2,
+            small_jump_backward: int = 2,
+            medium_jump_forward: int = 5,
+            medium_jump_backward: int = 5,
+            large_jump_forward: int = 30,
+            large_jump_backward: int = 30,
+            command_desc: bool = True,
+            ) -> None:
+        self.smallJumpForward = small_jump_forward
+        """Specifies the time interval for small jumping forward."""
+        self.smallJumpBackward = small_jump_backward
+        """Specifies the time interval for small jumping backward."""
+        self.mediumJumpForward = medium_jump_forward
+        """Specifies the time interval for medium jumping forward."""
+        self.mediumJumpBackward = medium_jump_backward
+        """Specifies the time interval for medium jumping backward."""
+        self.largeJumpForward = large_jump_forward
+        """Specifies the time interval for large jumping forward."""
+        self.largeJumpBackward = large_jump_backward
+        """Specifies the time interval for large jumping backward."""
+        self.commandDesc = command_desc
+        """Specifies whether the description of commands to be shown to
+        the user.
+        """

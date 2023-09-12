@@ -189,7 +189,7 @@ class PlaylistView(tk.Frame):
         """The margin between items."""
         self._plvwItems: list[_PlvwItem] = []
         """The playlist view items."""
-        self._selected: int | None = None
+        self._secelctedIdx: int | None = None
         """Specifies the index of seleceted playlist view item."""
         self._selectCb = select_bc
         """The callback to be called upon selection."""
@@ -243,14 +243,14 @@ class PlaylistView(tk.Frame):
             self._frame.destroy()
         self._frame = ttk.Frame(self._cnvs)
         self._plvwItems.clear()
-        self._selected = None
+        self._secelctedIdx = None
         nItems = len(items)
         if nItems > 0:
             plvwItem = _PlvwItem(
                 self._frame,
                 0,
                 items[0],
-                self.SelectItem)
+                self._SelectIdx)
             plvwItem.pack(
                 side=tk.TOP,
                 fill=tk.X,
@@ -268,7 +268,7 @@ class PlaylistView(tk.Frame):
                 self._frame,
                 idx,
                 items[idx],
-                self.SelectItem)
+                self._SelectIdx)
             plvwItem.pack(
                 side=tk.TOP,
                 fill=tk.X,
@@ -282,17 +282,55 @@ class PlaylistView(tk.Frame):
             self._frame.winfo_reqwidth(),
             self._frame.winfo_reqheight())
         self._cnvs['scrollregion'] = self._scrollRegion
+    
+    def _SelectIdx(self, __idx: int | None) -> None:
+        """"""
+        self.SelectedIdx = __idx
 
-    def SelectItem(self, idx: int) -> None:
-        """Selects the `idx`th item in the playlist view."""
-        if isinstance(self._selected, int):
-            self._plvwItems[self._selected].Selected = False
-        self._selected = idx
-        self._plvwItems[idx].Selected = True
-        # Checking visibility of the playlist view item...
-        if not self._IsVisible(idx):
-            self._ScrollTo(idx)
-        self._selectCb(idx)
+    @property
+    def SelectedIdx(self) -> int | None:
+        """Gets or sets the index of selected item in this playlist view.
+        If nothing is seleceted, it returns `None`.
+        
+        The r-value to this property must be `int`, `None`, or any value
+        whcih can be converted to `int` witout losing data.
+
+        #### Exceptions:
+        1. `TypeError`: an inappropriate value is provided. Refer to the
+        aforementioned notes.
+        2. `IndexError`: an out-of-bound index is provided.
+        """
+        return self._secelctedIdx
+
+    @SelectedIdx.setter
+    def SelectedIdx(self, __idx: int | None, /) -> None:
+        # Validating the r-value...
+        if __idx is not None:
+            try:
+                intIdx = int(__idx)
+                if __idx == intIdx:
+                    __idx = intIdx
+                else:
+                    raise TypeError()
+            except TypeError as err:
+                err.args = "Selected index of a playlist view must be an" \
+                    f" integer or None, given: {type(__idx)}"
+                raise err
+            else:
+                if not 0 <= __idx < len(self._plvwItems):
+                    raise IndexError("An out-of-bound index is provided to"
+                        " the playlist view widget.")
+        # From here on, '__idx' is strictly integer or None...
+        # De-selecting previous index...
+        if self._secelctedIdx is not None:
+            self._plvwItems[self._secelctedIdx].Selected = False
+        self._secelctedIdx = __idx
+        if __idx is not None:
+            self._plvwItems[__idx].Selected = True
+            # Checking visibility of the playlist view item...
+            if not self._IsVisible(__idx):
+                self._ScrollTo(__idx)
+            self._selectCb(__idx)
     
     def _IsVisible(self, idx: int) -> bool:
         """Checks whether `idx`th item in this playlist view is visible
@@ -347,7 +385,7 @@ class PlaylistView(tk.Frame):
         # Freeing simple attributes...
         del self._margin
         del self._selectCb
-        del self._selected
+        del self._secelctedIdx
         del self._scrollRegion
         # Destroying children widgets...
         if self._frame:
@@ -356,5 +394,3 @@ class PlaylistView(tk.Frame):
             widget.destroy()
         self._plvwItems.clear()
         del self._plvwItems
-        # Calling super class destroyer...
-        super().destroy()

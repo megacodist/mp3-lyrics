@@ -13,6 +13,8 @@ from json import loads
 from math import isnan
 from pathlib import Path
 import subprocess
+from traceback import TracebackException
+from types import TracebackType
 from typing import Any
 
 from media.abstract_mp3 import AbstractMp3, MP3NotFoundError
@@ -209,3 +211,11 @@ class FFmpegMP3(AbstractMp3):
             self._popen.terminate()
         except AttributeError:
             pass
+    
+    def __exit__(
+            self,
+            exc_type: Exception,
+            exc_val: TracebackException,
+            exc_tb: TracebackType
+            ) -> None:
+        self.Close()

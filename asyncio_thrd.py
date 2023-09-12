@@ -17,12 +17,22 @@ from pathlib import Path
 from threading import Thread
 from typing import Any, Callable, Iterable, Mapping, TypeVar, ParamSpec
 
+import attrs
+
 from media.lrc import Lrc
-from win_utils import LoadingFolderInfo
 
 
 _ReturnType = TypeVar('_ReturnType')
 _Param = ParamSpec('_Param')
+
+
+@attrs.define
+class LoadingFolderInfo:
+    folder: str
+    mp3s: list[str]
+    selectIdx: int | None = attrs.field(
+        default=None)
+
 
 
 class AsyncioThrd(Thread):
