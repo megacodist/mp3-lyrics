@@ -259,24 +259,27 @@ class Lrc:
         return pth.with_suffix('.lrc')
     
     @classmethod
-    def CreateLrc(cls, filename: str | Path) -> None:
-        """Creates the specified LRC file.
+    def CreateLrc(cls, filename: PathLike) -> None:
+        """Creates the specified empty LRC file.
         
-        Exceptions:
-        TypeError: 'filename' is not either a string or a Path object
-        ValueError: 'filename' does not have '.lrc' extension
+        #### Exceptions:
+        * `TypeError`: 'filename' is not a path-like object
+        * `ValueError`: 'filename' does not have '.lrc' extension
+        * `FileExistsError`: the specified LRC file already exists
         """
+        from os import fspath
         # Checking the correctness of 'filename' parameter...
-        if isinstance(filename, str):
-            filename = Path(filename)
-        elif not isinstance(filename, Path):
-            raise TypeError(
-                "'filename' must be either a string or a Path object")
+        try:
+            if not isinstance(filename, Path):
+                pth = Path(fspath(filename))
+        except TypeError as err:
+            err.args = "'filename' must be a path-like object but given " \
+                f"'{type(filename)}'"
+            raise err
         if filename.suffix != '.lrc':
             raise ValueError("'filename' does not have '.lrc' extension")
-        
         # Creating the LRC file...
-        with open(filename, mode='xt') as lrcFileObj:
+        with open(filename, mode='xt') as _:
             pass
 
     def __init__(

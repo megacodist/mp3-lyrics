@@ -70,7 +70,7 @@ class Mp3LyricsWin(tk.Tk):
         """Specifies a class to instantiate objects bound to MP3
         processing and functionalities.
         """
-        self._mp3: AbstractMp3 | None = None
+        self._audio: AbstractMp3 | None = None
         """Specifies the MP3 object to perform related processing and
         functionalities.
         """
@@ -114,11 +114,6 @@ class Mp3LyricsWin(tk.Tk):
         """Specifies what to do when the playback of the current file
         finishes. Its value is integer number of AfterPlayed enumeration.
         """
-        self._lrcLoaded: bool = False
-        """Specifies whether the LRC file has been loaded or not. This flag
-        in conjuction with _lrc object can determine whether the LRC file
-        exists or not.
-        """
         self._timestamps: SortedList[float] = SortedList(
             cp=CollisionPolicy.END)
         """The timestamps of the loaded LRC files."""
@@ -152,6 +147,8 @@ class Mp3LyricsWin(tk.Tk):
         """The async op of loading LRC object."""
         self._audioAsyncOp: AsyncOp | None = None
         """The async op of loading audio object."""
+        self._fileInfoAsyncOp: AsyncOp | None = None
+        """The async op of loading file info."""
         self._preferences = Prefrences()
         """The preferences of the application"""
         # Initializing the GUI...
@@ -595,7 +592,7 @@ class Mp3LyricsWin(tk.Tk):
             variable=self._afterPlayed)
         self._menu_afterPlayed.add_radiobutton(
             label='Previous audio, loop at  the beginning',
-            value=AfterPlayed.NEXT_LOOP.value,
+            value=AfterPlayed.PREV_LOOP.value,
             variable=self._afterPlayed)
         
         # Creating 'Player' menu...
@@ -783,17 +780,6 @@ class Mp3LyricsWin(tk.Tk):
     
     def _CopyLyricsItem(self, type_: CopyType) -> None:
         pass
-
-    def _ShowAudioPos_Gui(self, __pos: float, /) -> None:
-        """Reflects the provided value in the play-time slider and clock.
-        """
-        # Updating the play-time slider...
-        self._slider_playTime.set(__pos)
-        # Updating the play-time clock...
-        timestamp = Timestamp.FromFloat(__pos, ndigits=self._ndigits)
-        self._lbl_posMin['text'] = str(timestamp.minutes)
-        self._lbl_posSec['text'] = str(timestamp.seconds)
-        self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
     
     def _OpenFile(self) -> None:
         """Pops up 'Browse for a file' dialog, loads the MP3 into
@@ -830,6 +816,7 @@ class Mp3LyricsWin(tk.Tk):
         # Declaring variables -----------------------------
         from utils.ops import LoadPlaylist
         # Processing --------------------------------------
+        # Disabling the playlist GUI...
         self._btn_prev.config(state=tk.DISABLED)
         self._menu_playlist.entryconfigure(
             'Previous',
@@ -841,6 +828,14 @@ class Mp3LyricsWin(tk.Tk):
         # Populating the playlistview...
         if self._playlistAsyncOp is None:
             self._WithdrawAudio_Gui()
+            # Canceling any ongoing operation...
+            if self._lrcAsyncOp is not None:
+                self._lrcAsyncOp.Cancel()
+            if self._audioAsyncOp is not None:
+                self._audioAsyncOp.Cancel()
+            if self._fileInfoAsyncOp is not None:
+                self._fileInfoAsyncOp.Cancel()
+            # Loading new playlist...
             self._playlistAsyncOp = self._asyncManager.InitiateOp(
                 start_cb=LoadPlaylist,
                 start_args=(playlist, self,),
@@ -923,12 +918,12 @@ class Mp3LyricsWin(tk.Tk):
         self._lastAudio = self._playlist.GetAudio(idx)
         audio_file = self._playlist.GetFullPath(idx)
         # Stopping the audio which is already playing...
-        if self._mp3 and self._mp3.playing:
+        self._LoadLrc(audio_file)
+        if self._audio and self._audio.playing:
             self._StopPlaying()
             # Forcing the audio, which is pending to load, to play...
             self._status |= AppStatus.PENDING_PLAY
         self._LoadAudio(audio_file)
-        self._LoadLrc(audio_file)
     
     def _LoadLrc(self, audio_file: PathLike) -> None:
         """Loads the associated LRC file of `audio_file` into the GUI
@@ -988,7 +983,7 @@ class Mp3LyricsWin(tk.Tk):
             self._LoadLrc(new_lrc)
 
     def _LoadAudio(self, audio: PathLike) -> None:
-        """Loads the specified audio both as an object into `_mp3` and
+        """Loads the specified audio both as an object into `_audio` and
         into the player as well.
         """
         # Declaring variables -----------------------------
@@ -1011,7 +1006,7 @@ class Mp3LyricsWin(tk.Tk):
 
     def _OnAudioLoaded(self, future: Future[AbstractMp3]) -> None:
         self._audioAsyncOp = None
-        self._mp3 = future.result()
+        self._audio = future.result()
         self._ExhibitAudio_Gui()
         if self._status & AppStatus.PENDING_PLAY:
             self._status &= (~AppStatus.PENDING_PLAY)
@@ -1033,158 +1028,17 @@ class Mp3LyricsWin(tk.Tk):
 
     def _OnFileInfoLoaded(self, future: Future[dict[str, Any]]) -> None:
         pass
-    
-    def _DecideAfterPlayed(self) -> None:
-        match self._afterPlayed.get():
-            case AfterPlayed.STOP.value:
-                self._StopPlaying()
-            case AfterPlayed.LOOP.value:
-                self._SeekAudio(0.0)
-                self._mp3.Play()
-                self._syncPTAfterID = self.after(
-                    self._TIME_PLAYBACK,
-                    self._SyncPTSlider)
-            case AfterPlayed.NEXT.value:
-                #self._mp3.Close()
-                self._PlayNextAudio(loop=False)
-            case AfterPlayed.NEXT_LOOP.value:
-                #self._mp3.Close()
-                self._PlayNextAudio(loop=True)
-            case AfterPlayed.PREV.value:
-                #self._mp3.Close()
-                self._PlayPrevAudio(loop=False)
-            case AfterPlayed.PREV_LOOP.value:
-                #self._mp3.Close()
-                self._PlayPrevAudio(loop=True)
 
-    def _PlayPause(self) -> None:
-        if self._mp3 is None:
-            self._msgvw.AddMessage(
-                message='No audio has been loaded to play/pause',
-                title='Play/pause audio',
-                type_=MessageType.ERROR)
-            return
-        # Checking if the MP3 is palying or not...
-        if self._mp3.playing:
-            # The audio is playing...
-            self._btn_palyPause['image'] = self._IMG_PLAY
-            self._mp3.Pause()
-            self._StopSyncingPTSlider()
-        else:
-            # The audio is not playing...
-            self._btn_palyPause['image'] = self._IMG_PAUSE
-            pos = round(self._slider_playTime.get())
-            self._slider_playTime.set(pos)
-            self._mp3.pos = pos
-            self._mp3.Play()
-            # Updating play-time slider...
-            self._syncPTAfterID = self.after(
-                self._TIME_PLAYBACK,
-                self._SyncPTSlider)
-    
-    def _StopPlaying(self) -> None:
-        """Stops the playback of the loaded audio and reflects it in
-        the GUI.
-        """
-        if self._mp3 is None:
-            self._msgvw.AddMessage(
-                message='No audio has been loaded to stop',
-                title='Stop audio',
-                type_=MessageType.ERROR)
-            return
-        if self._mp3.playing:
-            self._StopSyncingPTSlider()
-        self._mp3.Stop()
-        self._pos = 0.0
-        self._ShowAudioPos_Gui(0.0)
-        self._btn_palyPause['image'] = self._IMG_PLAY
-        self._RemoveABRepeat()
-
-    def _SeekAudio(self, __pos: float, /) -> None:
-        """Seeks the playback of the audio to the specified position
-        and updating GUI to reflect the new position.
-        """
-        self._mp3.pos = __pos
-        self._pos = __pos
-        self._ShowAudioPos_Gui(__pos)
-    
-    def _JumpAudio(
-            self,
-            direction: JumpDirection,
-            step: JumpStep,
-            ) -> None:
-        """Jumps the audio either forward or backward, with the specified
-        step.
-        """
-        if step == JumpStep.SMALL:
-            offset = self._preferences.smallJumpForward
-        elif step == JumpStep.MEDIUM:
-            offset = self._preferences.mediumJumpForward
-        elif step == JumpStep.LARGE:
-            offset = self._preferences.largeJumpForward
-        else:
-            logging.error(f"Invalid jump stem: '{step}'")
-            return
-        if direction == JumpDirection.FORWARD:
-            pos = self._pos + offset
-            if pos > self._mp3.Duration:
-                pos = self._mp3.Duration
-        elif direction == JumpDirection.BACKWARD:
-            pos = self._pos - offset
-            if pos < 0.0:
-                pos = 0.0
-        else:
-            logging.error(f"Invalid jump direction: '{direction}'")
-            return
-        self._SeekAudio(pos)
-    
-    def _PlayNextAudio(self, loop: bool = False) -> None:
-        """Plays next audio in the playlist. If the playlist reaches to
-        the end, it stops playing unless `loop` is set to `True` which
-        forces to play from the start of the playlist.
-        """
-        if not isinstance(loop, bool):
-            raise TypeError("'loop' argument must be 'bool', given "\
-                f"'{type(loop)}'")
-        # Selecting next audio in the playlist view...
-        try:
-            self._plvw.SelectedIdx += 1
-        except IndexError:
-            if loop:
-                self._plvw.SelectedIdx = 0
-    
-    def _PlayPrevAudio(self, loop: bool = False) -> None:
-        """Plays previous audio in the playlist. If the playlist reaches
-        to the beginning, it stops playing unless `loop` is set to `True`
-        which forces to play from the end of the playlist.
-        """
-        if not isinstance(loop, bool):
-            raise TypeError("'loop' argument must be 'bool', given "\
-                f"'{type(loop)}'")
-        # Selecting previous audio in the playlist view...
-        idx = self._plvw.SelectedIdx
-        if idx > 0:
-            self._plvw.SelectedIdx = idx - 1
-        elif idx == 0:
-            if loop:
-                self._plvw.SelectedIdx = len(self._playlist.Audios) - 1
-        else:
-            logging.error("Invalis negative index in the playlist view.")
-    
-    def _ChangeVolume(self, value: str) -> None:
-        if self._mp3:
-            self._mp3.volume = float(value) * 10
-    
     def _SyncPTSlider(self) -> None:
         try:
-            self._pos = self._mp3.pos
+            self._pos = self._audio.pos
             self._ShowAudioPos_Gui(self._pos)
         except ValueError:
             logging.error(
                 f"There was a problem converting {self._pos}"
                 + f" to a {Timestamp} object")
         # Checking whether the MP3 has finished or not...
-        if not self._mp3.playing:
+        if not self._audio.playing:
             # The MP3 finished, deciding on the action...
             self._DecideAfterPlayed()
             return
@@ -1251,9 +1105,9 @@ class Mp3LyricsWin(tk.Tk):
     
     def _OnPTSliderPressed(self, event: tk.Event) -> None:
         # Stoping syncing of play-time slider...
-        if self._mp3:
+        if self._audio:
             self._SeekAudio(self._GetMp3PosBySiderX(event.x))
-            if self._mp3.playing:
+            if self._audio.playing:
                 self._StopSyncingPTSlider()
         # Sticking play-time slider at this position...
         self._keepPTAfterID = self.after(
@@ -1274,10 +1128,168 @@ class Mp3LyricsWin(tk.Tk):
         # Updating the GUI & the playback...
         pos = self._GetMp3PosBySiderX(event.x)
         self._SeekAudio(pos)
-        if self._mp3 and self._mp3.playing:
+        if self._audio and self._audio.playing:
             self._syncPTAfterID = self.after(
                 self._TIME_PLAYBACK,
                 self._SyncPTSlider)
+    
+    def _DecideAfterPlayed(self) -> None:
+        match self._afterPlayed.get():
+            case AfterPlayed.STOP.value:
+                self._StopPlaying()
+            case AfterPlayed.LOOP.value:
+                self._SeekAudio(0.0)
+                self._audio.Play()
+                self._syncPTAfterID = self.after(
+                    self._TIME_PLAYBACK,
+                    self._SyncPTSlider)
+            case AfterPlayed.NEXT.value:
+                self._PlayNextAudio(loop=False, pending_play=True)
+            case AfterPlayed.NEXT_LOOP.value:
+                self._PlayNextAudio(loop=True, pending_play=True)
+            case AfterPlayed.PREV.value:
+                self._PlayPrevAudio(loop=False, pending_play=True)
+            case AfterPlayed.PREV_LOOP.value:
+                self._PlayPrevAudio(loop=True, pending_play=True)
+
+    def _PlayPause(self) -> None:
+        if self._audio is None:
+            self._msgvw.AddMessage(
+                message='No audio has been loaded to play/pause',
+                title='Play/pause audio',
+                type_=MessageType.ERROR)
+            return
+        # Checking if the MP3 is palying or not...
+        if self._audio.playing:
+            # The audio is playing...
+            self._btn_palyPause['image'] = self._IMG_PLAY
+            self._audio.Pause()
+            self._StopSyncingPTSlider()
+        else:
+            # The audio is not playing...
+            self._btn_palyPause['image'] = self._IMG_PAUSE
+            pos = round(self._slider_playTime.get())
+            self._slider_playTime.set(pos)
+            self._audio.pos = pos
+            self._audio.Play()
+            # Updating play-time slider...
+            self._syncPTAfterID = self.after(
+                self._TIME_PLAYBACK,
+                self._SyncPTSlider)
+    
+    def _StopPlaying(self) -> None:
+        """Stops the playback of the loaded audio and reflects it in
+        the GUI.
+        """
+        if self._audio is None:
+            self._msgvw.AddMessage(
+                message='No audio has been loaded to stop',
+                title='Stop audio',
+                type_=MessageType.ERROR)
+            return
+        if self._audio.playing:
+            self._StopSyncingPTSlider()
+        self._audio.Stop()
+        self._pos = 0.0
+        self._ShowAudioPos_Gui(0.0)
+        self._btn_palyPause['image'] = self._IMG_PLAY
+        self._RemoveABRepeat()
+
+    def _SeekAudio(self, __pos: float, /) -> None:
+        """Seeks the playback of the audio to the specified position
+        and updating GUI to reflect the new position.
+        """
+        self._audio.pos = __pos
+        self._pos = __pos
+        self._ShowAudioPos_Gui(__pos)
+    
+    def _JumpAudio(
+            self,
+            direction: JumpDirection,
+            step: JumpStep,
+            ) -> None:
+        """Jumps the audio either forward or backward, with the specified
+        step.
+        """
+        if step == JumpStep.SMALL:
+            offset = self._preferences.smallJumpForward
+        elif step == JumpStep.MEDIUM:
+            offset = self._preferences.mediumJumpForward
+        elif step == JumpStep.LARGE:
+            offset = self._preferences.largeJumpForward
+        else:
+            logging.error(f"Invalid jump stem: '{step}'")
+            return
+        if direction == JumpDirection.FORWARD:
+            pos = self._pos + offset
+            if pos > self._audio.Duration:
+                pos = self._audio.Duration
+        elif direction == JumpDirection.BACKWARD:
+            pos = self._pos - offset
+            if pos < 0.0:
+                pos = 0.0
+        else:
+            logging.error(f"Invalid jump direction: '{direction}'")
+            return
+        self._SeekAudio(pos)
+    
+    def _PlayNextAudio(
+            self,
+            loop: bool = False,
+            pending_play: bool = False,
+            ) -> None:
+        """Plays next audio in the playlist. If the playlist reaches to
+        the end, it stops playing unless `loop` is set to `True` which
+        forces to play from the start of the playlist. If `pending_play`
+        is set to `True`; the new selected audio, if any, will be marked
+        to play.
+        """
+        if not isinstance(loop, bool):
+            raise TypeError("'loop' argument must be 'bool', given "\
+                f"'{type(loop)}'")
+        # Selecting next audio in the playlist view...
+        nItems = self._plvw.ItemsCount
+        idx = self._plvw.SelectedIdx
+        idx += 1
+        if idx >= nItems:
+            if loop:
+                idx = 0
+            else:
+                return
+        if pending_play:
+            self._status |= AppStatus.PENDING_PLAY
+        self._plvw.SelectedIdx = idx
+    
+    def _PlayPrevAudio(
+            self,
+            loop: bool = False,
+            pending_play: bool = False,
+            ) -> None:
+        """Plays previous audio in the playlist. If the playlist reaches
+        to the beginning, it stops playing unless `loop` is set to `True`
+        which forces to play from the end of the playlist. If `pending_play`
+        is set to `True`; the new selected audio, if any, will be marked
+        to play.
+        """
+        if not isinstance(loop, bool):
+            raise TypeError("'loop' argument must be 'bool', given "\
+                f"'{type(loop)}'")
+        # Selecting previous audio in the playlist view...
+        nItems = self._plvw.ItemsCount
+        idx = self._plvw.SelectedIdx
+        idx -= 1
+        if idx < 0:
+            if loop:
+                idx = nItems - 1
+            else:
+                return
+        if pending_play:
+            self._status |= AppStatus.PENDING_PLAY
+        self._plvw.SelectedIdx = idx
+    
+    def _ChangeVolume(self, value: str) -> None:
+        if self._audio:
+            self._audio.volume = float(value) * 10
     
     def _ReadSettings(self) -> None:
         # Considering MP3 Lyrics Window (MLW) default settings...
@@ -1299,13 +1311,13 @@ class Mp3LyricsWin(tk.Tk):
 
     def _OnWinClosing(self) -> None:
         # Closing the MP3 file...
-        if self._mp3:
-            self._mp3.Close()
+        if self._audio:
+            self._audio.Close()
         # Saving LRC if changed...
-        if self._mp3 and self._lrcedt.HasChanged():
+        if self._audio and self._lrcedt.HasChanged():
             toSave = askyesno(message='Do you want to save the LRC?')
             if toSave:
-                self._SaveCreateLrc()
+                self._SaveCreateLrc(exhibit_gui=False)
         # Saving settings...
         settings: dict[str, Any] = {}
         # Getting the geometry of the MP3 Lyrics Window (MLW)...
@@ -1355,10 +1367,10 @@ class Mp3LyricsWin(tk.Tk):
         self.destroy()
     
     def _RemoveABRepeat(self) -> None:
-        if self._mp3 is not None:
+        if self._audio is not None:
             self._abvw.a = 0.0
-            self._abvw.b = self._mp3.Duration
-            self._abvw.length = self._mp3.Duration
+            self._abvw.b = self._audio.Duration
+            self._abvw.length = self._audio.Duration
         else:
             self._abvw.Reset()
     
@@ -1368,20 +1380,23 @@ class Mp3LyricsWin(tk.Tk):
     def _SetB(self) -> None:
         self._abvw.b = self._pos
     
-    def _SaveCreateLrc(self) -> None:
-        """Saves the LRC or creates an LRC object."""
-        if self._mp3 and self._lrcedt.HasChanged():
+    def _SaveCreateLrc(self, exhibit_gui: bool = True) -> None:
+        """Saves the LRC or creates an LRC object. `exhibit_gui` specifies
+        whether the saved LRC must be reflected in the GUI.
+        """
+        if self._audio and self._lrcedt.HasChanged():
             if self._lrc is None:
-                lrcFilename = Lrc.GetLrcFilename(self._mp3.Filename)
+                lrcFilename = Lrc.GetLrcFilename(self._audio.Filename)
                 Lrc.CreateLrc(lrcFilename)
                 self._lrc = Lrc(lrcFilename, True, True)
             self._lrc.lyrics = self._lrcedt.GetAllLyricsItems()
             self._lrc['by'] = 'https://twitter.com/megacodist'
             self._lrc['re'] = 'https://github.com/megacodist/mp3-lyrics'
             self._lrc.Save()
-            self._timestamps.clear()
-            self._OnLrcLoaded(self._lrc)
-        elif self._mp3:
+            if exhibit_gui:
+                self._timestamps.clear()
+                self._OnLrcLoaded(self._lrc)
+        elif self._audio:
             self._msgvw.AddMessage(
                 title='Save/create command',
                 message='No change has been made in the lyrics editor.',
@@ -1399,14 +1414,25 @@ class Mp3LyricsWin(tk.Tk):
                 pLrc.unlink()
                 del self._lrc
                 self._lrc = None
-                self._lrcLoaded = True
                 self._ExhibitLrc_Gui()
     
     def _DiscardChanges(self) -> None:
-        self._LoadLrc(self._lastAudio)
-    
-    def _UpdateGui_Pausable(self) -> None:
-        pass
+        if self._lrc and self._lrcedt.HasChanged():
+            toDiscard = askyesno(
+                title='Discard LRC changes',
+                message='Do you want to discard LRC changes?')
+            if toDiscard:
+                self._LoadLrc(self._audio.Filename)
+        elif self._lrc:
+            self._msgvw.AddMessage(
+                title='No changes',
+                message=f"No changes were found in '{self._lrc.filename}'.",
+                type_=MessageType.WARNING)
+        else:
+            self._msgvw.AddMessage(
+                title='No LRC',
+                message="No LRC file was loaded to revert to.",
+                type_=MessageType.WARNING)
 
     def _ShowAudioLength_Gui(self, __leng: float) -> None:
         """Shows the length of the audio in the GUI."""
@@ -1430,16 +1456,16 @@ class Mp3LyricsWin(tk.Tk):
             'Stop',
             state=tk.NORMAL)
         self._slider_playTime.config(state='enable')
-        self._mp3.volume = self._slider_volume.get() * 10
-        self._slider_playTime['to'] = self._mp3.Duration
-        self._ShowAudioLength_Gui(self._mp3.Duration)
-        self._abvw.length = self._mp3.Duration
+        self._audio.volume = self._slider_volume.get() * 10
+        self._slider_playTime['to'] = self._audio.Duration
+        self._ShowAudioLength_Gui(self._audio.Duration)
+        self._abvw.length = self._audio.Duration
         self._abvw.b = self._abvw.length
-        self._mp3.pos = 0.0
+        self._audio.pos = 0.0
         self._pos = 0.0
         self._ShowAudioPos_Gui(0.0)
         self.title(f'{Path(self._lastAudio).name} - MP3 Lyrics')
-        self._infovw.PopulateAudioInfo(self._mp3)
+        self._infovw.PopulateAudioInfo(self._audio)
 
     def _WithdrawAudio_Gui(self) -> None:
         """Withdraws the audio from the GUI so PLAYER will be disables."""
@@ -1457,20 +1483,24 @@ class Mp3LyricsWin(tk.Tk):
         self._slider_playTime.config(state='disable')
         self.title('MP3 Lyrics')
         self._infovw.ClearAudioInfo()
+        self._audio = None
     
     def _WithdrawLrc_Gui(self) -> None:
-        """Withdraws the loaded LRC object from the GUI."""
-        if self._mp3 and self._lrcedt.HasChanged():
+        """Withdraws the loaded LRC object from the GUI and unload
+        the LRC object from the application.
+        """
+        if self._audio and self._lrcedt.HasChanged():
             toSave = askyesno(
                 title='Unsaved lyrics',
                 message='Do you want to save/create the lyrics?')
             if toSave:
-                self._SaveCreateLrc()
+                self._SaveCreateLrc(exhibit_gui=False)
         self._timestamps.clear()
         self._lrcvw.Clear()
         self._lrcedt.ClearContent()
         self._lrcedt.SetChangeOrigin()
         self._infovw.ClearLrcInfo()
+        self._lrc = None
     
     def _ExhibitLrc_Gui(self) -> None:
         """Updates the GUI to show the content of the loaded `_lrc`.
@@ -1478,6 +1508,7 @@ class Mp3LyricsWin(tk.Tk):
         loaded.
         """
         # Populating the lyrics view...
+        self._timestamps.clear()
         allLyrics = [li.text for li in self._lrc.lyrics]
         if self._lrc.AreTimstampsOk():
             self._lrcvw.Populate(allLyrics, True)
@@ -1501,3 +1532,18 @@ class Mp3LyricsWin(tk.Tk):
                 title='LRC error',
                 message='\n'.join(message),
                 type_=MessageType.WARNING)
+
+    def _ShowAudioPos_Gui(self, __pos: float, /) -> None:
+        """Reflects the provided value in the play-time slider and clock.
+        """
+        # Updating the play-time slider...
+        self._slider_playTime.set(__pos)
+        # Updating the play-time clock...
+        try:
+            timestamp = Timestamp.FromFloat(__pos, ndigits=self._ndigits)
+        except ValueError:
+            # The argument was negative, replacing 0.0...
+            timestamp = Timestamp.FromFloat(0.0)
+        self._lbl_posMin['text'] = str(timestamp.minutes)
+        self._lbl_posSec['text'] = str(timestamp.seconds)
+        self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]

@@ -286,6 +286,11 @@ class PlaylistView(tk.Frame):
     def _SelectIdx(self, __idx: int | None) -> None:
         """"""
         self.SelectedIdx = __idx
+    
+    @property
+    def ItemsCount(self) -> int:
+        """Gets the number of items in the view."""
+        return len(self._plvwItems)
 
     @property
     def SelectedIdx(self) -> int | None:
