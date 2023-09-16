@@ -7,7 +7,7 @@
 
 from concurrent.futures._base import Future
 import logging
-from os import PathLike
+from os import PathLike, fspath
 from pathlib import Path
 from pprint import pprint
 import re
@@ -76,8 +76,10 @@ class Mp3LyricsWin(tk.Tk):
         """
         self._lrc: Lrc | None = None
         """The LRC object associated with the current MP3 file."""
-        self._playlist: AbstractPlaylist | None = None
-        """The playlist object."""
+        self._playlist: PathLike | AbstractPlaylist | None = None
+        """Specifies the playlist object or its path during loading the
+        playlist.
+        """
         self._RES_DIR = res_dir
         """Specifies the resource folder of the application."""
         self._asyncThrd = asyncio_thrd
@@ -180,7 +182,7 @@ class Mp3LyricsWin(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self._OnWinClosing)
 
         # Loading last playlist & audio...
-        self._LoadPlaylist(settings['MLW_PLAYLIST_PATH'])
+        self._LoadPlaylist(Path(settings['MLW_PLAYLIST_PATH']))
     
     def _LoadRes(self) -> None:
         # Loading 'volume.png'...
@@ -787,7 +789,7 @@ class Mp3LyricsWin(tk.Tk):
         view.
         """
         from media import FilenameToPlypathAudio
-        folder = self._playlist.Path if self._playlist else None
+        folder = fspath(self._playlist) if self._playlist else None
         filename = askopenfilename(
             title='Browse for a file',
             filetypes=[
@@ -816,16 +818,7 @@ class Mp3LyricsWin(tk.Tk):
         # Declaring variables -----------------------------
         from utils.ops import LoadPlaylist
         # Processing --------------------------------------
-        # Disabling the playlist GUI...
-        self._btn_prev.config(state=tk.DISABLED)
-        self._menu_playlist.entryconfigure(
-            'Previous',
-            state=tk.DISABLED)
-        self._btn_next.config(state=tk.DISABLED)
-        self._menu_playlist.entryconfigure(
-            'Next',
-            state=tk.DISABLED)
-        # Populating the playlistview...
+        self._DisablePlaylist_Gui()
         if self._playlistAsyncOp is None:
             self._WithdrawAudio_Gui()
             # Canceling any ongoing operation...
@@ -836,6 +829,7 @@ class Mp3LyricsWin(tk.Tk):
             if self._fileInfoAsyncOp is not None:
                 self._fileInfoAsyncOp.Cancel()
             # Loading new playlist...
+            self._playlist = playlist
             self._playlistAsyncOp = self._asyncManager.InitiateOp(
                 start_cb=LoadPlaylist,
                 start_args=(playlist, self,),
@@ -856,21 +850,18 @@ class Mp3LyricsWin(tk.Tk):
         """This callback gets triggered whenever loading of the playlist
         has finished.
         """
-        args = future.result()
-        playlist = args[0]
-        items = args[1]
         self._playlistAsyncOp = None
-        self._btn_prev.config(state=tk.NORMAL)
-        self._menu_playlist.entryconfigure(
-            'Previous',
-            state=tk.NORMAL)
-        self._btn_next.config(state=tk.NORMAL)
-        self._menu_playlist.entryconfigure(
-            'Next',
-            state=tk.NORMAL)
-        self._playlist = playlist
-        self._plvw.Populate(items)
-        self._CheckAudioInPlaylist()
+        try:
+            self._playlist, items = future.result()
+        except FileNotFoundError:
+            self._msgvw.AddMessage(
+                title='Playlist not found',
+                message=f"The playlist '{self._playlist}' did not find.",
+                type_=MessageType.ERROR)    
+        else:
+            self._plvw.Populate(items)
+            self._EnablePlaylist_Gui()
+            self._CheckAudioInPlaylist()
     
     def _OnPlaylistLoadingCanceled(
             self,
@@ -1300,7 +1291,7 @@ class Mp3LyricsWin(tk.Tk):
             'MLW_Y': 200,
             'MLW_STATE': 'normal',
             'MLW_LAST_FILE': Path('res/Tarantella abballa abballa.mp3'),
-            'MLW_PLAYLIST_PATH': Path('.'),
+            'MLW_PLAYLIST_PATH': '.',
             'MLW_VOLUME': 5.0,
             'MLW_TS_COL_WIDTH': 150,
             'MLW_LT_COL_WIDTH': 300,
@@ -1343,7 +1334,7 @@ class Mp3LyricsWin(tk.Tk):
         settings['MLW_STATE'] = self.state()
         settings['MLW_LAST_FILE'] = self._lastAudio
         if self._playlist:
-            settings['MLW_PLAYLIST_PATH'] = self._playlist.Path
+            settings['MLW_PLAYLIST_PATH'] = fspath(self._playlist)
         settings['MLW_VOLUME'] = self._slider_volume.get()
         colsWidth = self._lrcedt.get_column_widths()
         settings['MLW_TS_COL_WIDTH'] = colsWidth[0]
@@ -1547,3 +1538,25 @@ class Mp3LyricsWin(tk.Tk):
         self._lbl_posMin['text'] = str(timestamp.minutes)
         self._lbl_posSec['text'] = str(timestamp.seconds)
         self._lbl_posMilli['text'] = str(timestamp.milliseconds)[2:]
+
+    def _EnablePlaylist_Gui(self) -> None:
+        """Enables the playlist GUI."""
+        self._btn_prev.config(state=tk.NORMAL)
+        self._menu_playlist.entryconfigure(
+            'Previous',
+            state=tk.NORMAL)
+        self._btn_next.config(state=tk.NORMAL)
+        self._menu_playlist.entryconfigure(
+            'Next',
+            state=tk.NORMAL)
+    
+    def _DisablePlaylist_Gui(self) -> None:
+        """Disables the playlist GUI."""
+        self._btn_prev.config(state=tk.DISABLED)
+        self._menu_playlist.entryconfigure(
+            'Previous',
+            state=tk.DISABLED)
+        self._btn_next.config(state=tk.DISABLED)
+        self._menu_playlist.entryconfigure(
+            'Next',
+            state=tk.DISABLED)

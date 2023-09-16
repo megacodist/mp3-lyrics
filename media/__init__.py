@@ -88,6 +88,10 @@ class AbstractPlaylist:
         """Gets the `idx`th audio in this playlist."""
         pass
 
+    @abstractmethod
+    def __fspath__(self) -> str | bytes:
+        pass
+
 
 class FolderPlaylist(AbstractPlaylist):
     """This class encapsulates accessing and using peer MP3 files in
@@ -95,6 +99,10 @@ class FolderPlaylist(AbstractPlaylist):
 
     If you have done with objects of this class, call `Close` method to
     release resources.
+
+    This class supports the following:
+    * Path-like protocol
+    * Context manager protocol
     """
     def __init__(
             self,
@@ -223,6 +231,10 @@ class FolderPlaylist(AbstractPlaylist):
         self.Close()
         # Not suppressing possible exception...
         return False
+    
+    def __fspath__(self) -> str | bytes:
+        from os import fspath
+        return fspath(self._dir)
     
     def __del__(self) -> None:
         del self._master

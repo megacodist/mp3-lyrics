@@ -41,15 +41,19 @@ def LoadPlaylist(
         deleted_cb: Callable[[Path], None] | None = None,
         ) -> tuple[AbstractPlaylist, Iterable[PlaylistItem]]:
     """Accepts a `Path` object to a playlist and returns the playlist
-    object and all included audios in the playlist as a 2-tuple. It
-    returns `(None, [])` on any error.
+    object and all included audios in the playlist as a 2-tuple.
+
+    #### Exceptions:
+    * `FileNotFoundError`: the playlist did not find in the file system.
     """
     from collections import OrderedDict
     from media import PLAYLIST_EXTS, FolderPlaylist, GetAllTags
     if q:
         q.put(f'Loading playlist\n{playlist}')
     # Instantiating the playlist...
-    if playlist.is_dir():
+    if not playlist.exists():
+        raise FileNotFoundError()
+    elif playlist.is_dir():
         playlistObj = FolderPlaylist(
             master=master,
             dir_=playlist,
