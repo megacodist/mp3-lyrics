@@ -136,7 +136,8 @@ class LyricsEditor(tksheet.Sheet):
             LyricsItem(''))
         colIdx = 1
         self.set_sheet_data(data, reset_col_positions=False)
-        self.select_cell(rowIdx, colIdx)              
+        if selectedBox:
+            self.select_cell(rowIdx, colIdx)              
 
     def InsertRowBelow(self) -> None:
         """Inserts a row below selected cells. If no cell is selected,
@@ -159,7 +160,8 @@ class LyricsEditor(tksheet.Sheet):
             LyricsItem(''))
         colIdx = 1
         self.set_sheet_data(data, reset_col_positions=False)
-        self.select_cell(rowIdx, colIdx)
+        if selectedBox:
+            self.select_cell(rowIdx, colIdx)
 
     def ClearCells(self) -> None:
         selectedCells = self.get_selected_cells()
